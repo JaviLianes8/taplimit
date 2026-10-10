@@ -8,4 +8,6 @@ All notable changes to this project are documented here. The format follows
 
 ## [0.1.0]
 
-- First release.
+- First release: `rate_limit` decorator, `RateLimiter` object, and `RateLimitExceeded`.
+- Sliding-window algorithm, thread-safe, zero dependencies.
+- Block-or-raise behaviour, with injectable clock and sleep for tests.
