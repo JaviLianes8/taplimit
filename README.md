@@ -1,4 +1,4 @@
-# ratekeeper
+# taplimit
 
 Small, typed, thread-safe in-process rate-limit decorator: N calls per period, block or raise.
 
@@ -8,7 +8,7 @@ share a budget. The clock and sleep are injectable, so tests never wait on real 
 ## Install
 
 ```
-pip install ratekeeper
+pip install taplimit
 ```
 
 ## Usage
@@ -17,7 +17,7 @@ Cap a function at N calls per period. By default a call over the limit blocks un
 slot frees:
 
 ```python
-from ratekeeper import rate_limit
+from taplimit import rate_limit
 
 @rate_limit(calls=15, period=60)
 def call_api() -> None:
@@ -27,7 +27,7 @@ def call_api() -> None:
 Prefer to fail fast instead of waiting? Ask it to raise:
 
 ```python
-from ratekeeper import rate_limit, RateLimitExceeded
+from taplimit import rate_limit, RateLimitExceeded
 
 @rate_limit(calls=15, period=60, on_limit="raise")
 def call_api() -> None:
@@ -43,7 +43,7 @@ Share one budget across several functions, or control slots by hand, with the li
 object. It is a decorator, a context manager, and exposes `acquire` / `try_acquire`:
 
 ```python
-from ratekeeper import RateLimiter
+from taplimit import RateLimiter
 
 limiter = RateLimiter(calls=100, period=60)
 
@@ -78,7 +78,7 @@ limiter = RateLimiter(
 
 ## How it limits
 
-ratekeeper uses a **sliding window**: it keeps the timestamps of recent calls and a slot
+taplimit uses a **sliding window**: it keeps the timestamps of recent calls and a slot
 frees exactly `period` seconds after the call that took it. A burst never carries over a
 fixed boundary the way a reset-every-minute counter does, so the rate you ask for is the
 rate you get. All state is guarded by a lock, so one decorator or limiter is safe to share
@@ -99,7 +99,7 @@ synchronously" is oddly unserved:
 - [`limiter`](https://pypi.org/project/limiter/) is a token-bucket library with a different
   `rate` / `capacity` API, not the plain calls-per-period shape.
 
-ratekeeper is the small, modern, typed take: one decorator, a sliding window, thread-safe,
+taplimit is the small, modern, typed take: one decorator, a sliding window, thread-safe,
 no dependencies, and a clock you can fake in tests. Reach for it when a single process needs
 to stay under a rate and a full rate-limiting backend would be too much.
 

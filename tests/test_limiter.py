@@ -7,7 +7,7 @@ import threading
 import pytest
 from _fakeclock import FakeClock
 
-from ratekeeper import RateLimiter, RateLimitExceeded
+from taplimit import RateLimiter, RateLimitExceeded
 
 
 def test_allows_up_to_the_limit_without_waiting() -> None:

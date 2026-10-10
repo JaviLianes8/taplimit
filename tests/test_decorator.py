@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from _fakeclock import FakeClock
 
-from ratekeeper import RateLimitExceeded, rate_limit
+from taplimit import RateLimitExceeded, rate_limit
 
 
 def test_blocks_by_default_until_a_slot_frees() -> None:
