@@ -4,7 +4,13 @@ import taplimit
 
 # The public API. Add every exported name here as the library grows; this list is the
 # contract and the test below fails if the module and this list disagree.
-PUBLIC_API: list[str] = ["RateLimitExceeded", "RateLimiter", "rate_limit"]
+PUBLIC_API: list[str] = [
+    "KeyedRateLimiter",
+    "RateLimitExceeded",
+    "RateLimiter",
+    "parse_rate",
+    "rate_limit",
+]
 
 
 def test_all_lists_exactly_the_public_api() -> None:
