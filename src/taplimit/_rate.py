@@ -38,7 +38,8 @@ def parse_rate(text: str) -> tuple[int, float]:
     if match is None:
         raise ValueError(f"invalid rate {text!r}: expected a form such as '10/s' or '100/min'")
     unit = match["unit"].lower()
-    if unit not in _UNITS and unit.endswith("s") and unit[:-1] in _UNITS:
+    # Plurals only for multi-letter units, so "ms" is refused instead of read as minutes.
+    if unit not in _UNITS and unit.endswith("s") and len(unit) > 2 and unit[:-1] in _UNITS:
         unit = unit[:-1]
     if unit not in _UNITS:
         raise ValueError(f"invalid rate {text!r}: unknown unit {match['unit']!r}")

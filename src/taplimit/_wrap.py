@@ -21,7 +21,8 @@ def wrap(
     The guard receives the call's arguments, which lets keyed limiters derive a key.
     The signature, name and docstring of ``func`` are preserved.
     """
-    if inspect.iscoroutinefunction(func):
+    # type(func).__call__ also catches instances whose class defines an async __call__.
+    if inspect.iscoroutinefunction(func) or inspect.iscoroutinefunction(type(func).__call__):
         target = cast(Callable[P, Awaitable[Any]], func)
 
         @wraps(func)
