@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import errno
 import os
 import sys
 from collections.abc import Sequence
@@ -13,16 +14,24 @@ from ._rate import parse_rate
 
 _EPILOG = """\
 examples:
-  taplimit 5/s access.log              replay a log at five lines per second
-  tail -f app.log | taplimit 2/s       follow a busy log without flooding the terminal
+  taplimit 5/s access.log
+      replay a log at five lines per second
+  tail -f app.log | taplimit 2/s
+      follow a busy log without flooding the terminal
   taplimit 30/min urls.txt | xargs -n1 curl -sO
-                                       fetch at most thirty URLs per minute
-  journalctl -f | taplimit --drop 10/s keep at most ten lines per second, drop the rest
+      fetch at most thirty URLs per minute
+  journalctl -f | taplimit --drop 10/s
+      keep at most ten lines per second, drop the rest
 
 RATE is CALLS/UNIT or CALLS per UNIT with UNIT in s, m, h, d (or sec, min, hour,
 day), optionally with a multiplier: 10/s, 100/min, 5/2s, "3 per hour".
-Lines are passed through byte for byte. Exit status: 0 on success, 2 on bad usage.
+Lines are passed through byte for byte.
+Exit status: 0 on success (also when the reader closes the pipe), 2 on bad usage,
+130 when interrupted with Ctrl-C.
 """
+
+# Writing to a closed pipe raises EPIPE on POSIX and EINVAL on Windows.
+_CLOSED_PIPE = (errno.EPIPE, errno.EINVAL)
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -46,19 +55,34 @@ def _parser() -> argparse.ArgumentParser:
     return parser
 
 
-def pump(source: BinaryIO, sink: BinaryIO, limiter: RateLimiter, *, drop: bool) -> int:
-    """Copy lines from ``source`` to ``sink`` through ``limiter``; return lines dropped."""
-    dropped = 0
+def pump(
+    source: BinaryIO,
+    sink: BinaryIO,
+    limiter: RateLimiter,
+    *,
+    drop: bool,
+    tally: list[int] | None = None,
+) -> int:
+    """Copy lines from ``source`` to ``sink`` through ``limiter``; return lines dropped.
+
+    ``tally[0]``, when given, is kept up to date so the count survives an interruption.
+    """
+    counter = [0] if tally is None else tally
     for line in iter(source.readline, b""):
         if drop:
             if not limiter.try_acquire():
-                dropped += 1
+                counter[0] += 1
                 continue
         else:
             limiter.acquire()
         sink.write(line)
         sink.flush()
-    return dropped
+    return counter[0]
+
+
+def _silence_stdout() -> None:
+    devnull = os.open(os.devnull, os.O_WRONLY)
+    os.dup2(devnull, sys.stdout.fileno())
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -70,23 +94,25 @@ def main(argv: Sequence[str] | None = None) -> int:
     except ValueError as exc:
         parser.error(str(exc))
     limiter = RateLimiter(calls, period)
+    tally = [0]
+    status = 0
     try:
         if args.file is None:
-            dropped = pump(sys.stdin.buffer, sys.stdout.buffer, limiter, drop=args.drop)
+            pump(sys.stdin.buffer, sys.stdout.buffer, limiter, drop=args.drop, tally=tally)
         else:
             try:
                 source = open(args.file, "rb")  # noqa: SIM115
             except OSError as exc:
                 parser.error(f"cannot open {args.file}: {exc.strerror}")
             with source:
-                dropped = pump(source, sys.stdout.buffer, limiter, drop=args.drop)
+                pump(source, sys.stdout.buffer, limiter, drop=args.drop, tally=tally)
     except KeyboardInterrupt:
-        return 130
-    except BrokenPipeError:
+        status = 130
+    except OSError as exc:
+        if not isinstance(exc, BrokenPipeError) and exc.errno not in _CLOSED_PIPE:
+            raise
         # The reader went away (for example `| head`): stop quietly, as cat does.
-        devnull = os.open(os.devnull, os.O_WRONLY)
-        os.dup2(devnull, sys.stdout.fileno())
-        return 0
-    if dropped:
-        print(f"taplimit: dropped {dropped} line(s)", file=sys.stderr)
-    return 0
+        _silence_stdout()
+    if tally[0]:
+        print(f"taplimit: dropped {tally[0]} line(s)", file=sys.stderr)
+    return status
