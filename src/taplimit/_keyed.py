@@ -49,6 +49,11 @@ class KeyedRateLimiter(_Base, Generic[K]):
             window = self._windows[key] = _Window(self._calls, self._period)
         return window
 
+    def _peek(self, key: Hashable, now: float) -> _Window:
+        # Read-only queries must not start tracking a key nobody has used.
+        window = self._windows.get(key)
+        return _Window(self._calls, self._period) if window is None else window
+
     def acquire(
         self, key: K, *, blocking: bool = True, timeout: float | None = None, cost: int = 1
     ) -> None:
@@ -77,14 +82,18 @@ class KeyedRateLimiter(_Base, Generic[K]):
         return self._retry_after(key, cost)
 
     def reset(self, key: K | None = None) -> None:
-        """Forget the grants of ``key``, or of every key when it is None."""
+        """Forget past grants of ``key``, or of every key when it is None.
+
+        As with RateLimiter.reset, callers already waiting keep their reserved slots.
+        """
         with self._lock:
-            if key is None:
-                for window in self._windows.values():
-                    window.clear()
-                self._windows.clear()
-            elif key in self._windows:
-                self._windows.pop(key).clear()
+            now = self._clock()
+            for k in list(self._windows) if key is None else [key]:
+                window = self._windows.get(k)
+                if window is not None:
+                    window.clear(now)
+                    if not window.hits:
+                        del self._windows[k]
 
     def __len__(self) -> int:
         """Return the number of keys currently tracked."""
@@ -107,7 +116,7 @@ class KeyedRateLimiter(_Base, Generic[K]):
         ``key`` receives exactly the arguments of the decorated call. Plain and
         ``async def`` functions are both supported and keep their signature.
         """
-        self._check_cost(cost)
+        cost = self._check_cost(cost)
 
         def before(*args: P.args, **kwargs: P.kwargs) -> None:
             k = key(*args, **kwargs)

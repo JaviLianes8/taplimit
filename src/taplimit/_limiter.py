@@ -79,12 +79,13 @@ class RateLimiter(_Base):
         return self._retry_after(None, cost)
 
     def reset(self) -> None:
-        """Forget every grant, freeing the whole budget for new callers.
+        """Forget past grants, freeing the budget for new callers.
 
-        Callers already waiting keep their place and wake at their reserved time.
+        Callers already waiting keep their reserved slots, so new callers still queue
+        behind them and the limit holds across a reset.
         """
         with self._lock:
-            self._win.clear()
+            self._win.clear(self._clock())
 
     def __repr__(self) -> str:
         return f"RateLimiter(calls={self._calls}, period={self._period})"
@@ -124,7 +125,7 @@ class RateLimiter(_Base):
 
         Works on plain and ``async def`` functions alike and preserves the signature.
         """
-        self._check_cost(cost)
+        cost = self._check_cost(cost)
 
         def before(*_args: Any, **_kwargs: Any) -> None:
             self._acquire(None, cost, blocking, timeout, None)

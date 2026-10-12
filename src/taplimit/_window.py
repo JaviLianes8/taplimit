@@ -13,17 +13,18 @@ class _Window:
     come, first served. The owner guards every method with its own lock.
     """
 
-    __slots__ = ("calls", "epoch", "hits", "period")
+    __slots__ = ("calls", "hits", "period")
 
     def __init__(self, calls: int, period: float) -> None:
         self.calls = calls
         self.period = period
         self.hits: deque[float] = deque()
-        self.epoch = 0  # bumped by clear() so stale give_back calls are ignored
 
-    def clear(self) -> None:
-        self.hits.clear()
-        self.epoch += 1
+    def clear(self, now: float) -> None:
+        """Forget past grants but keep reservations of callers still waiting."""
+        hits = self.hits
+        while hits and hits[0] <= now:
+            hits.popleft()
 
     def purge(self, now: float) -> None:
         horizon = now - self.period
@@ -46,10 +47,8 @@ class _Window:
     def take(self, at: float, cost: int) -> None:
         self.hits.extend([at] * cost)
 
-    def give_back(self, at: float, cost: int, epoch: int) -> None:
+    def give_back(self, at: float, cost: int) -> None:
         """Drop ``cost`` stamps equal to ``at``: an abandoned reservation."""
-        if epoch != self.epoch:
-            return  # cleared since the reservation was made
         for _ in range(cost):
             try:
                 self.hits.remove(at)
