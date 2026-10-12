@@ -1,31 +1,35 @@
-"""A thread-safe, in-process, sliding-window rate limiter."""
+"""A thread-safe, asyncio-aware, in-process, sliding-window rate limiter."""
 
 from __future__ import annotations
 
-import threading
 import time
-from collections import deque
 from collections.abc import Callable
-from functools import wraps
 from types import TracebackType
-from typing import ParamSpec, TypeVar
+from typing import Any, ParamSpec, TypeVar
 
-from ._errors import RateLimitExceeded
+from ._base import AsyncSleep, Clock, Sleep, _Base
+from ._window import _Window
+from ._wrap import wrap
 
 P = ParamSpec("P")
 R = TypeVar("R")
 
 
-class RateLimiter:
+class RateLimiter(_Base):
     """Allow at most ``calls`` acquisitions per ``period`` seconds.
 
-    The window slides: a slot frees exactly ``period`` seconds after the call that
-    took it, not on a shared clock boundary, so a burst never carries over. The
-    limiter is safe to share across threads and across functions, which lets several
-    callables draw on a single budget.
+    The window slides: at every instant ``t`` at most ``calls`` slots carry a grant
+    time in ``(t - period, t]``, so a slot frees exactly ``period`` seconds after the
+    call that took it and a burst never carries over a fixed boundary. Up to ``calls``
+    acquisitions succeed at once (the burst); after that the sustained rate is
+    ``calls / period``.
 
-    Inject ``clock`` (returns seconds) and ``sleep`` (waits seconds) to drive the
-    limiter from tests without real time passing.
+    One limiter is safe to share across threads, coroutines and functions. Blocking
+    callers reserve their slot under the lock and then wait for it, so they are served
+    first come, first served and a ``try_acquire`` never jumps the queue.
+
+    Inject ``clock`` (returns seconds), ``sleep`` (waits seconds) and ``async_sleep``
+    (awaits seconds, default ``asyncio.sleep``) to run it from tests without real time.
     """
 
     def __init__(
@@ -33,54 +37,57 @@ class RateLimiter:
         calls: int,
         period: float,
         *,
-        clock: Callable[[], float] = time.monotonic,
-        sleep: Callable[[float], None] = time.sleep,
+        clock: Clock = time.monotonic,
+        sleep: Sleep = time.sleep,
+        async_sleep: AsyncSleep | None = None,
     ) -> None:
-        if calls < 1:
-            raise ValueError("calls must be at least 1")
-        if period <= 0:
-            raise ValueError("period must be greater than 0")
-        self._calls = calls
-        self._period = period
-        self._clock = clock
-        self._sleep = sleep
-        self._lock = threading.Lock()
-        self._hits: deque[float] = deque()
+        super().__init__(calls, period, clock, sleep, async_sleep)
+        self._win = _Window(calls, period)
 
-    def _purge(self, now: float) -> None:
-        horizon = now - self._period
-        hits = self._hits
-        while hits and hits[0] <= horizon:
-            hits.popleft()
+    def _window(self, key: object, now: float) -> _Window:
+        return self._win
 
-    def try_acquire(self) -> bool:
-        """Take a slot without waiting. Return True if one was free, else False."""
-        with self._lock:
-            now = self._clock()
-            self._purge(now)
-            if len(self._hits) < self._calls:
-                self._hits.append(now)
-                return True
-            return False
+    def acquire(
+        self, *, blocking: bool = True, timeout: float | None = None, cost: int = 1
+    ) -> None:
+        """Take ``cost`` slots, waiting for them when ``blocking`` is True.
 
-    def acquire(self, *, blocking: bool = True) -> None:
-        """Take a slot, waiting for one when ``blocking`` is True.
-
-        When ``blocking`` is False and every slot is taken, raise RateLimitExceeded
-        carrying the seconds until the next slot opens. A rejected call never
-        consumes a slot.
+        With ``timeout`` the call waits at most that many seconds; if the slots cannot
+        be granted in time it raises RateLimitExceeded at once rather than sleeping in
+        vain. With ``blocking=False`` it raises as soon as the slots are not free. The
+        exception's ``retry_after`` says how long until they would be. A refused call
+        never consumes a slot, and a wait interrupted by an exception gives it back.
         """
-        while True:
-            with self._lock:
-                now = self._clock()
-                self._purge(now)
-                if len(self._hits) < self._calls:
-                    self._hits.append(now)
-                    return
-                wait = self._hits[0] + self._period - now
-            if not blocking:
-                raise RateLimitExceeded(wait)
-            self._sleep(wait if wait > 0 else 0.0)
+        self._acquire(None, cost, blocking, timeout, None)
+
+    async def acquire_async(
+        self, *, blocking: bool = True, timeout: float | None = None, cost: int = 1
+    ) -> None:
+        """Like ``acquire`` but waits with ``await``; cancellation returns the slots."""
+        await self._acquire_async(None, cost, blocking, timeout, None)
+
+    def try_acquire(self, cost: int = 1) -> bool:
+        """Take ``cost`` slots without waiting. Return True if they were free."""
+        return self._try(None, cost)
+
+    def available(self) -> int:
+        """Return how many slots a ``try_acquire`` could take right now."""
+        return self._available(None)
+
+    def retry_after(self, cost: int = 1) -> float:
+        """Return the seconds until ``cost`` slots could be taken; 0.0 if now."""
+        return self._retry_after(None, cost)
+
+    def reset(self) -> None:
+        """Forget every grant, freeing the whole budget for new callers.
+
+        Callers already waiting keep their place and wake at their reserved time.
+        """
+        with self._lock:
+            self._win.clear()
+
+    def __repr__(self) -> str:
+        return f"RateLimiter(calls={self._calls}, period={self._period})"
 
     def __enter__(self) -> RateLimiter:
         self.acquire()
@@ -94,10 +101,38 @@ class RateLimiter:
     ) -> None:
         return None
 
-    def __call__(self, func: Callable[P, R]) -> Callable[P, R]:
-        @wraps(func)
-        def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
-            self.acquire()
-            return func(*args, **kwargs)
+    async def __aenter__(self) -> RateLimiter:
+        await self.acquire_async()
+        return self
 
-        return wrapper
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> None:
+        return None
+
+    def __call__(self, func: Callable[P, R]) -> Callable[P, R]:
+        """Decorate a function or coroutine function so each call takes one slot."""
+        return self.limit()(func)
+
+    def limit(
+        self, *, blocking: bool = True, timeout: float | None = None, cost: int = 1
+    ) -> Callable[[Callable[P, R]], Callable[P, R]]:
+        """Return a decorator whose calls each ``acquire`` with these options.
+
+        Works on plain and ``async def`` functions alike and preserves the signature.
+        """
+        self._check_cost(cost)
+
+        def before(*_args: Any, **_kwargs: Any) -> None:
+            self._acquire(None, cost, blocking, timeout, None)
+
+        async def before_async(*_args: Any, **_kwargs: Any) -> None:
+            await self._acquire_async(None, cost, blocking, timeout, None)
+
+        def decorator(func: Callable[P, R]) -> Callable[P, R]:
+            return wrap(func, before, before_async)
+
+        return decorator
