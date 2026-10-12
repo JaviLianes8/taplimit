@@ -4,14 +4,14 @@ build-backend = "hatchling.build"
 
 [project]
 name = "taplimit"
-version = "0.1.0"
-description = "Small, typed, thread-safe in-process rate-limit decorator: N calls per period, block or raise"
+version = "0.2.0"
+description = "Small, typed, thread-safe in-process rate limiter: N calls per period, block or raise, sync or async, per key"
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
 license-files = ["LICENSE"]
 authors = [{ name = "Javier Lianes", email = "javier@lianes8studio.com" }]
-keywords = ["rate-limit", "ratelimit", "throttle", "decorator", "thread-safe", "sliding-window"]
+keywords = ["rate-limit", "ratelimit", "throttle", "decorator", "thread-safe", "sliding-window", "asyncio", "throttle-lines"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
@@ -19,6 +19,9 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = []
+
+[project.scripts]
+taplimit = "taplimit._cli:main"
 
 [project.optional-dependencies]
 dev = ["ruff", "mypy", "pytest", "build", "twine"]
@@ -33,6 +36,9 @@ Funding = "https://buymeacoffee.com/jlianesglrs"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/taplimit"]
+
+[tool.hatch.build.targets.sdist]
+exclude = ["IMPROVEMENTS-round.md"]
 
 [tool.ruff]
 line-length = 100
