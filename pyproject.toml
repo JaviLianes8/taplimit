@@ -37,6 +37,9 @@ Funding = "https://buymeacoffee.com/jlianesglrs"
 [tool.hatch.build.targets.wheel]
 packages = ["src/taplimit"]
 
+[tool.hatch.build.targets.sdist]
+exclude = ["IMPROVEMENTS-round.md"]
+
 [tool.ruff]
 line-length = 100
 target-version = "py310"

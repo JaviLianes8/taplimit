@@ -16,7 +16,8 @@ Consequences:
   seconds after the call that took it, so the long-run rate is `calls / period`.
 - **No boundary effect.** Unlike a fixed window that resets every minute, a burst at the
   end of one window cannot be followed by another at the start of the next.
-- **Memory.** One float per slot in use, so `O(calls)` per window.
+- **Memory.** One float per slot granted in the last period plus one per slot reserved
+  by a waiting caller, so `O(calls + waiters)` per window.
 
 A token bucket with capacity `calls` refilling at `calls / period` allows the same burst
 but refills continuously; the sliding window is stricter and easier to reason about,
@@ -49,14 +50,16 @@ All bookkeeping happens under one lock and never while waiting. A caller that mu
 - a `try_acquire` cannot steal a slot already reserved by a waiter.
 
 If a wait is interrupted (an exception in `sleep`, `KeyboardInterrupt`, or cancellation
-of a coroutine), the reservation is given back. `reset()` forgets all grants; callers
-already waiting keep their reserved time.
+of a coroutine), the reservation is given back. `reset()` forgets past grants but keeps
+the slots reserved by callers still waiting, so newcomers queue behind them and the
+limit holds across a reset.
 
 ## Threads and coroutines together
 
 One `RateLimiter` can serve both: threads call `acquire`, coroutines call
 `acquire_async` or use `async with limiter`. Decorating an `async def` makes each call
-await its slot. The lock is held only for a few operations, so it never stalls the
+await its slot; so does decorating an object whose class defines `async def __call__`.
+The lock is held only for a few operations, so it never stalls the
 event loop.
 
 ```python
@@ -148,6 +151,7 @@ assert clock.now == 10.0
 
 `taplimit RATE [FILE]` copies lines from FILE or standard input to standard output at
 most RATE lines per period, byte for byte and flushed line by line. `--drop` discards
-lines over the limit instead of waiting and reports how many on standard error. It exits
-with 0 on success, 2 on bad usage and 130 when interrupted; a closed pipe (`| head`)
-ends it quietly. `python -m taplimit` runs the same tool.
+lines over the limit instead of waiting and reports how many on standard error, also
+when stopped with Ctrl-C. It exits with 0 on success, 2 on bad usage and 130 when
+interrupted; a closed pipe (`| head`) ends it quietly. `python -m taplimit` runs the
+same tool.
