@@ -128,3 +128,17 @@ CPython 3.10.19, 3.11.5, 3.12.12, 3.13.2, 3.14.2 and 3.14.2 free-threaded, 619 p
 10 skipped on each (five live-oracle tests without the reference libraries, four opt-in
 end-to-end tests, the fetched-documentation test without its copy). 3.8 and 3.9 are also
 installed but below `requires-python`.
+
+## QA lenses (item 19)
+
+Five independent reviews, one at a time, each reading the certification rules, running the
+code and reporting only to the maintainer. Later rounds confirm the earlier findings and
+sweep at most 40 new mutations on the code changed since.
+
+| Lens | Round | Head | Verdict | Findings and outcome |
+| --- | --- | --- | --- | --- |
+| a. API and docs | 1 | be199b0 | FAIL | a literal dash character in a test; CHANGELOG missed `Decimal` and `Fraction` counts and overstated infinities; `rate_limit` key not checked when built; `annotations` visible in the package; NaN timeout message; README cross-check wording; no method examples. Fixed in a70f994 and 0758180 |
+| a | 2 | 0758180 | FAIL | all seven confirmed; the new method doctests were never run by the suite. Fixed in c00eebd |
+| a | 3 | c00eebd | PASS | breaking either method example now fails the suite |
+| b. Correctness and ground truth | 1 | c00eebd | PASS (4 low) | oracle fixture reproduced byte for byte; 500 own schedules (41,520 requests) against `limits` sync and async, `pyrate-limiter` memory and SQLite and a naive log, 0 mismatches; reservation model 800 seeds (59,646 operations), 0 mismatches; 645,120 rate strings against an own parser, 0 differences. Low: a waiter cancelled after a reset could return a newer grant at the same instant; GUIDE wait wording; `10pers` parsed; capture script wrote CRLF. Fixed in 106fe77 |
+| b | 2 | 106fe77 | PASS | fixes confirmed; 250 schedules, 400 model seeds, 645,120 strings, 0 differences; 34 mutants on changed code, 29 killed, 4 equivalent, 1 needing a contract (a multiplier ending in a bare point), added in a09535b |
