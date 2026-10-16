@@ -56,4 +56,4 @@ def test_preserves_the_wrapped_name_and_docstring() -> None:
 
 def test_rejects_an_unknown_on_limit_value() -> None:
     with pytest.raises(ValueError):
-        rate_limit(1, 10, on_limit="explode")
+        rate_limit(1, 10, on_limit="explode")  # type: ignore[arg-type]

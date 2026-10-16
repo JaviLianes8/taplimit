@@ -93,6 +93,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         calls, period = parse_rate(args.rate)
     except ValueError as exc:
         parser.error(str(exc))
+    if sys.stdout is None or (args.file is None and sys.stdin is None):
+        parser.error("standard input or output is not available")
     limiter = RateLimiter(calls, period)
     tally = [0]
     status = 0
@@ -103,7 +105,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             try:
                 source = open(args.file, "rb")  # noqa: SIM115
             except OSError as exc:
-                parser.error(f"cannot open {args.file}: {exc.strerror}")
+                name = args.file if len(args.file) <= 40 else args.file[:40] + "..."
+                parser.error(f"cannot open {name}: {exc.strerror}")
             with source:
                 pump(source, sys.stdout.buffer, limiter, drop=args.drop, tally=tally)
     except KeyboardInterrupt:

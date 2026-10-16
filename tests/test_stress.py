@@ -25,7 +25,7 @@ def _assert_never_faster(start: float, records: list[float], calls: int, period:
 
 
 def _run_threads(target: Callable[[], None], count: int) -> None:
-    threads = [threading.Thread(target=target) for _ in range(count)]
+    threads = [threading.Thread(target=target, daemon=True) for _ in range(count)]
     for thread in threads:
         thread.start()
     for thread in threads:
@@ -71,7 +71,7 @@ def test_mixed_try_and_blocking_threads_never_exceed_the_rate() -> None:
                 records.append(now)
 
     start = time.monotonic()
-    threads = [threading.Thread(target=worker, args=(i % 2 == 0,)) for i in range(8)]
+    threads = [threading.Thread(target=worker, args=(i % 2 == 0,), daemon=True) for i in range(8)]
     for thread in threads:
         thread.start()
     for thread in threads:
@@ -113,7 +113,7 @@ def test_keyed_threads_never_exceed_the_rate_per_key() -> None:
                 records[key].append(now)
 
     start = time.monotonic()
-    threads = [threading.Thread(target=worker, args=("ab"[i % 2],)) for i in range(6)]
+    threads = [threading.Thread(target=worker, args=("ab"[i % 2],), daemon=True) for i in range(6)]
     for thread in threads:
         thread.start()
     for thread in threads:

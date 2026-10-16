@@ -30,16 +30,19 @@ def test_reset_during_a_wait_keeps_the_limit() -> None:
 
     limiter = RateLimiter(1, 10, clock=clock.time, sleep=gated_sleep)
     limiter.acquire()  # t = 0
-    waiter = threading.Thread(target=limiter.acquire)
+    waiter = threading.Thread(target=limiter.acquire, daemon=True)
     waiter.start()
-    assert entered.wait(5)  # the waiter holds a reservation for t = 10
-    clock.advance(9)
-    limiter.reset()
-    assert not limiter.try_acquire()  # a newcomer still queues behind the waiter
-    assert limiter.retry_after() == pytest.approx(11.0)
-    clock.advance(1)
-    release.set()
-    waiter.join(5)
+    try:
+        assert entered.wait(5)  # the waiter holds a reservation for t = 10
+        clock.advance(9)
+        limiter.reset()
+        assert not limiter.try_acquire()  # a newcomer still queues behind the waiter
+        assert limiter.retry_after() == pytest.approx(11.0)
+        clock.advance(1)
+    finally:  # even when an assertion fails, let the waiter finish
+        clock.now = max(clock.now, 10.0)
+        release.set()
+        waiter.join(5)
     assert not waiter.is_alive()
 
 
@@ -138,7 +141,7 @@ def test_a_closed_pipe_ends_quietly() -> None:
         bufsize=0,  # no buffered flush of unsent input when the pipe is gone
     )
     assert proc.stdin is not None and proc.stdout is not None and proc.stderr is not None
-    feeder = threading.Thread(target=_feed, args=(proc.stdin,))
+    feeder = threading.Thread(target=_feed, args=(proc.stdin,), daemon=True)
     feeder.start()
     assert proc.stdout.readline() == b"line\n"
     proc.stdout.close()  # the reader goes away, like `| head -1`

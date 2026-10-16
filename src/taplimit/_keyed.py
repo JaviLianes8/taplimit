@@ -6,7 +6,7 @@ import time
 from collections.abc import Callable, Hashable
 from typing import Generic, ParamSpec, TypeVar
 
-from ._base import AsyncSleep, Clock, Sleep, _Base
+from ._base import AsyncSleep, Clock, Sleep, _Base, _check_timeout
 from ._window import _Window
 from ._wrap import wrap
 
@@ -23,6 +23,12 @@ class KeyedRateLimiter(_Base, Generic[K]):
     window has emptied is forgotten during a sweep that runs at most once per
     ``period``, so memory is bounded by the keys active in the last period or two.
     All keys share one lock; only the short bookkeeping runs under it, never a wait.
+
+    >>> limiter: KeyedRateLimiter[str] = KeyedRateLimiter(1, 60, clock=lambda: 0.0)
+    >>> limiter.try_acquire("alice"), limiter.try_acquire("bob"), limiter.try_acquire("alice")
+    (True, True, False)
+    >>> limiter.retry_after("alice"), limiter.available("carol"), len(limiter)
+    (60.0, 1, 2)
     """
 
     def __init__(
@@ -39,7 +45,7 @@ class KeyedRateLimiter(_Base, Generic[K]):
         self._last_sweep = clock()
 
     def _window(self, key: Hashable, now: float) -> _Window:
-        if now - self._last_sweep >= self._period:
+        if not 0 <= now - self._last_sweep < self._period:  # also after a clock step back
             self._last_sweep = now
             idle = [k for k, w in self._windows.items() if w.idle(now)]
             for k in idle:
@@ -61,13 +67,13 @@ class KeyedRateLimiter(_Base, Generic[K]):
 
         A refusal raises RateLimitExceeded whose ``key`` is the refused key.
         """
-        self._acquire(key, cost, blocking, timeout, key)
+        self._acquire(key, cost, blocking, timeout)
 
     async def acquire_async(
         self, key: K, *, blocking: bool = True, timeout: float | None = None, cost: int = 1
     ) -> None:
         """Like ``acquire`` but waits with ``await``; cancellation returns the slots."""
-        await self._acquire_async(key, cost, blocking, timeout, key)
+        await self._acquire_async(key, cost, blocking, timeout)
 
     def try_acquire(self, key: K, cost: int = 1) -> bool:
         """Take ``cost`` slots for ``key`` without waiting. Return True on success."""
@@ -87,12 +93,12 @@ class KeyedRateLimiter(_Base, Generic[K]):
         As with RateLimiter.reset, callers already waiting keep their reserved slots.
         """
         with self._lock:
-            now = self._clock()
+            now = self._now()
             for k in list(self._windows) if key is None else [key]:
                 window = self._windows.get(k)
                 if window is not None:
                     window.clear(now)
-                    if not window.hits:
+                    if not window.total:
                         del self._windows[k]
 
     def __len__(self) -> int:
@@ -115,16 +121,30 @@ class KeyedRateLimiter(_Base, Generic[K]):
 
         ``key`` receives exactly the arguments of the decorated call. Plain and
         ``async def`` functions are both supported and keep their signature.
+
+        >>> limits: KeyedRateLimiter[str] = KeyedRateLimiter(1, 60, clock=lambda: 0.0)
+        >>> @limits.limit(lambda user: user, blocking=False)
+        ... def greet(user: str) -> str:
+        ...     return f"hi {user}"
+        >>> greet("ann"), greet("bob")
+        ('hi ann', 'hi bob')
+        >>> greet("ann")
+        Traceback (most recent call last):
+        ...
+        taplimit.RateLimitExceeded: rate limit exceeded, retry after 60.000s
         """
+        if not callable(key):
+            raise TypeError("key must be a callable that receives the call's arguments")
         cost = self._check_cost(cost)
+        timeout = _check_timeout(blocking, timeout)
 
         def before(*args: P.args, **kwargs: P.kwargs) -> None:
             k = key(*args, **kwargs)
-            self._acquire(k, cost, blocking, timeout, k)
+            self._acquire(k, cost, blocking, timeout)
 
         async def before_async(*args: P.args, **kwargs: P.kwargs) -> None:
             k = key(*args, **kwargs)
-            await self._acquire_async(k, cost, blocking, timeout, k)
+            await self._acquire_async(k, cost, blocking, timeout)
 
         def decorator(func: Callable[P, R]) -> Callable[P, R]:
             return wrap(func, before, before_async)

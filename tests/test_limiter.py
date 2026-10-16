@@ -137,7 +137,7 @@ def test_is_thread_safe_under_contention() -> None:
             with lock:
                 taken += 1
 
-    threads = [threading.Thread(target=worker) for _ in range(200)]
+    threads = [threading.Thread(target=worker, daemon=True) for _ in range(200)]
     for thread in threads:
         thread.start()
     for thread in threads:

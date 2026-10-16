@@ -7,7 +7,7 @@ from collections.abc import Callable
 from types import TracebackType
 from typing import Any, ParamSpec, TypeVar
 
-from ._base import AsyncSleep, Clock, Sleep, _Base
+from ._base import AsyncSleep, Clock, Sleep, _Base, _check_timeout
 from ._window import _Window
 from ._wrap import wrap
 
@@ -30,6 +30,18 @@ class RateLimiter(_Base):
 
     Inject ``clock`` (returns seconds), ``sleep`` (waits seconds) and ``async_sleep``
     (awaits seconds, default ``asyncio.sleep``) to run it from tests without real time.
+
+    >>> now = [0.0]
+    >>> def sleep(seconds: float) -> None:
+    ...     now[0] += seconds
+    >>> limiter = RateLimiter(2, 10, clock=lambda: now[0], sleep=sleep)
+    >>> [limiter.try_acquire() for _ in range(3)]
+    [True, True, False]
+    >>> limiter.available(), limiter.retry_after()
+    (0, 10.0)
+    >>> limiter.acquire()  # waits ten seconds on the injected clock
+    >>> now[0]
+    10.0
     """
 
     def __init__(
@@ -42,7 +54,7 @@ class RateLimiter(_Base):
         async_sleep: AsyncSleep | None = None,
     ) -> None:
         super().__init__(calls, period, clock, sleep, async_sleep)
-        self._win = _Window(calls, period)
+        self._win = _Window(self._calls, self._period)
 
     def _window(self, key: object, now: float) -> _Window:
         return self._win
@@ -58,13 +70,13 @@ class RateLimiter(_Base):
         exception's ``retry_after`` says how long until they would be. A refused call
         never consumes a slot, and a wait interrupted by an exception gives it back.
         """
-        self._acquire(None, cost, blocking, timeout, None)
+        self._acquire(None, cost, blocking, timeout)
 
     async def acquire_async(
         self, *, blocking: bool = True, timeout: float | None = None, cost: int = 1
     ) -> None:
         """Like ``acquire`` but waits with ``await``; cancellation returns the slots."""
-        await self._acquire_async(None, cost, blocking, timeout, None)
+        await self._acquire_async(None, cost, blocking, timeout)
 
     def try_acquire(self, cost: int = 1) -> bool:
         """Take ``cost`` slots without waiting. Return True if they were free."""
@@ -85,7 +97,7 @@ class RateLimiter(_Base):
         behind them and the limit holds across a reset.
         """
         with self._lock:
-            self._win.clear(self._clock())
+            self._win.clear(self._now())
 
     def __repr__(self) -> str:
         return f"RateLimiter(calls={self._calls}, period={self._period})"
@@ -124,14 +136,25 @@ class RateLimiter(_Base):
         """Return a decorator whose calls each ``acquire`` with these options.
 
         Works on plain and ``async def`` functions alike and preserves the signature.
+
+        >>> limiter = RateLimiter(1, 60, clock=lambda: 0.0)
+        >>> @limiter.limit(blocking=False)
+        ... def ping() -> str:
+        ...     return "pong"
+        >>> ping()
+        'pong'
+        >>> limiter.reset()  # forget the grant
+        >>> ping()
+        'pong'
         """
         cost = self._check_cost(cost)
+        timeout = _check_timeout(blocking, timeout)
 
         def before(*_args: Any, **_kwargs: Any) -> None:
-            self._acquire(None, cost, blocking, timeout, None)
+            self._acquire(None, cost, blocking, timeout)
 
         async def before_async(*_args: Any, **_kwargs: Any) -> None:
-            await self._acquire_async(None, cost, blocking, timeout, None)
+            await self._acquire_async(None, cost, blocking, timeout)
 
         def decorator(func: Callable[P, R]) -> Callable[P, R]:
             return wrap(func, before, before_async)
