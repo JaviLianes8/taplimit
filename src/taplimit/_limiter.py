@@ -7,7 +7,7 @@ from collections.abc import Callable
 from types import TracebackType
 from typing import Any, ParamSpec, TypeVar
 
-from ._base import AsyncSleep, Clock, Sleep, _Base
+from ._base import AsyncSleep, Clock, Sleep, _Base, _check_timeout
 from ._window import _Window
 from ._wrap import wrap
 
@@ -30,6 +30,18 @@ class RateLimiter(_Base):
 
     Inject ``clock`` (returns seconds), ``sleep`` (waits seconds) and ``async_sleep``
     (awaits seconds, default ``asyncio.sleep``) to run it from tests without real time.
+
+    >>> now = [0.0]
+    >>> def sleep(seconds: float) -> None:
+    ...     now[0] += seconds
+    >>> limiter = RateLimiter(2, 10, clock=lambda: now[0], sleep=sleep)
+    >>> [limiter.try_acquire() for _ in range(3)]
+    [True, True, False]
+    >>> limiter.available(), limiter.retry_after()
+    (0, 10.0)
+    >>> limiter.acquire()  # waits ten seconds on the injected clock
+    >>> now[0]
+    10.0
     """
 
     def __init__(
@@ -42,7 +54,7 @@ class RateLimiter(_Base):
         async_sleep: AsyncSleep | None = None,
     ) -> None:
         super().__init__(calls, period, clock, sleep, async_sleep)
-        self._win = _Window(calls, period)
+        self._win = _Window(self._calls, self._period)
 
     def _window(self, key: object, now: float) -> _Window:
         return self._win
@@ -126,6 +138,7 @@ class RateLimiter(_Base):
         Works on plain and ``async def`` functions alike and preserves the signature.
         """
         cost = self._check_cost(cost)
+        timeout = _check_timeout(blocking, timeout)
 
         def before(*_args: Any, **_kwargs: Any) -> None:
             self._acquire(None, cost, blocking, timeout, None)

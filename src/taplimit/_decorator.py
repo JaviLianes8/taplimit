@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import time
 from collections.abc import Callable, Hashable
-from typing import Any, ParamSpec, TypeVar
+from typing import Any, Literal, ParamSpec, TypeVar
 
 from ._base import AsyncSleep
 from ._keyed import KeyedRateLimiter
@@ -18,7 +18,7 @@ def rate_limit(
     calls: int,
     period: float,
     *,
-    on_limit: str = "block",
+    on_limit: Literal["block", "raise"] = "block",
     timeout: float | None = None,
     key: Callable[..., Hashable] | None = None,
     clock: Callable[[], float] = time.monotonic,
@@ -36,6 +36,18 @@ def rate_limit(
     ``key=lambda user, *_: user`` for a per-user limit.
 
     Inject ``clock``, ``sleep`` and ``async_sleep`` to run it without real time.
+    ``on_limit`` other than "block" or "raise", or a ``timeout`` with "raise", is a
+    ValueError when the decorator is built.
+
+    >>> @rate_limit(2, 60, on_limit="raise", clock=lambda: 0.0)
+    ... def ping() -> str:
+    ...     return "pong"
+    >>> ping(), ping()
+    ('pong', 'pong')
+    >>> ping()
+    Traceback (most recent call last):
+    ...
+    taplimit.RateLimitExceeded: rate limit exceeded, retry after 60.000s
     """
     if on_limit not in ("block", "raise"):
         raise ValueError('on_limit must be "block" or "raise"')

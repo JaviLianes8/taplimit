@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+import math
+import numbers
 import operator
 import threading
 from collections.abc import Awaitable, Callable, Hashable
@@ -16,22 +18,49 @@ Sleep = Callable[[float], None]
 AsyncSleep = Callable[[float], Awaitable[None]]
 
 
+def _kind(value: object) -> str:
+    return type(value).__name__[:40]
+
+
 def _as_count(value: object, name: str) -> int:
+    if isinstance(value, bool):
+        raise TypeError(f"{name} must be an integer, not bool")
     # 0.1.0 accepted whole floats such as 10.0 read from config; keep honouring them.
     if isinstance(value, float) and value.is_integer():
         return int(value)
     if isinstance(value, SupportsIndex):
         return operator.index(value)
-    raise TypeError(f"{name} must be an integer, not {type(value).__name__}")
+    raise TypeError(f"{name} must be an integer, not {_kind(value)}")
 
 
-def _check_config(calls: int, period: float) -> int:
+def _as_seconds(value: object, name: str) -> float:
+    if isinstance(value, bool) or not isinstance(value, numbers.Real):
+        raise TypeError(f"{name} must be a number of seconds, not {_kind(value)}")
+    try:
+        return float(value)
+    except OverflowError:  # an int too large for a float
+        return math.inf
+
+
+def _check_config(calls: int, period: float) -> tuple[int, float]:
     calls = _as_count(calls, "calls")
     if calls < 1:
         raise ValueError("calls must be at least 1")
-    if not period > 0:
-        raise ValueError("period must be greater than 0")
-    return calls
+    period = _as_seconds(period, "period")
+    if not 0 < period < math.inf:  # also rejects NaN
+        raise ValueError("period must be a finite number of seconds greater than 0")
+    return calls, period
+
+
+def _check_timeout(blocking: bool, timeout: float | None) -> float | None:
+    if timeout is None:
+        return None
+    if not blocking:
+        raise ValueError("cannot specify a timeout for a non-blocking acquire")
+    seconds = _as_seconds(timeout, "timeout")
+    if not seconds >= 0:  # also rejects NaN
+        raise ValueError("timeout must not be negative")
+    return seconds
 
 
 class _Base:
@@ -45,8 +74,7 @@ class _Base:
         sleep: Sleep,
         async_sleep: AsyncSleep | None,
     ) -> None:
-        self._calls = _check_config(calls, period)
-        self._period = period
+        self._calls, self._period = _check_config(calls, period)
         self._clock = clock
         self._sleep = sleep
         self._async_sleep: AsyncSleep = asyncio.sleep if async_sleep is None else async_sleep
@@ -81,11 +109,7 @@ class _Base:
     ) -> tuple[_Window, float, float]:
         """Grant or reserve slots under the lock; return (window, ready, wait)."""
         cost = self._check_cost(cost)
-        if timeout is not None:
-            if not blocking:
-                raise ValueError("cannot specify a timeout for a non-blocking acquire")
-            if not timeout >= 0:  # also rejects NaN
-                raise ValueError("timeout must not be negative")
+        timeout = _check_timeout(blocking, timeout)
         with self._lock:
             now = self._clock()
             window = self._window(key, now)

@@ -6,7 +6,7 @@ import time
 from collections.abc import Callable, Hashable
 from typing import Generic, ParamSpec, TypeVar
 
-from ._base import AsyncSleep, Clock, Sleep, _Base
+from ._base import AsyncSleep, Clock, Sleep, _Base, _check_timeout
 from ._window import _Window
 from ._wrap import wrap
 
@@ -23,6 +23,12 @@ class KeyedRateLimiter(_Base, Generic[K]):
     window has emptied is forgotten during a sweep that runs at most once per
     ``period``, so memory is bounded by the keys active in the last period or two.
     All keys share one lock; only the short bookkeeping runs under it, never a wait.
+
+    >>> limiter: KeyedRateLimiter[str] = KeyedRateLimiter(1, 60, clock=lambda: 0.0)
+    >>> limiter.try_acquire("alice"), limiter.try_acquire("bob"), limiter.try_acquire("alice")
+    (True, True, False)
+    >>> limiter.retry_after("alice"), limiter.available("carol"), len(limiter)
+    (60.0, 1, 2)
     """
 
     def __init__(
@@ -92,7 +98,7 @@ class KeyedRateLimiter(_Base, Generic[K]):
                 window = self._windows.get(k)
                 if window is not None:
                     window.clear(now)
-                    if not window.hits:
+                    if not window.runs:
                         del self._windows[k]
 
     def __len__(self) -> int:
@@ -117,6 +123,7 @@ class KeyedRateLimiter(_Base, Generic[K]):
         ``async def`` functions are both supported and keep their signature.
         """
         cost = self._check_cost(cost)
+        timeout = _check_timeout(blocking, timeout)
 
         def before(*args: P.args, **kwargs: P.kwargs) -> None:
             k = key(*args, **kwargs)
