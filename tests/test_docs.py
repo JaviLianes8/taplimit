@@ -25,11 +25,14 @@ def test_module_doctests_pass(name: str) -> None:
 
 @pytest.mark.parametrize("name", taplimit.__all__)
 def test_every_public_name_runs_its_own_example(name: str) -> None:
-    tests = doctest.DocTestFinder(recurse=False).find(getattr(taplimit, name), name)
+    # module=False: the methods live in private modules, the classes report "taplimit".
+    tests = doctest.DocTestFinder().find(getattr(taplimit, name), name, module=False)
     assert sum(len(t.examples) for t in tests) >= 3
+    if name.endswith("RateLimiter"):  # the limit() method shows its own example too
+        assert f"{name}.limit" in {t.name for t in tests if t.examples}
     runner = doctest.DocTestRunner(optionflags=doctest.ELLIPSIS)
     for test in tests:
-        test.globs = {name: getattr(taplimit, name)}
+        test.globs = {n: getattr(taplimit, n) for n in taplimit.__all__}
         runner.run(test)
     assert runner.summarize(verbose=False).failed == 0
 
