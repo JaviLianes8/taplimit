@@ -10,7 +10,7 @@ Progress:
 - [x] Docs: README, GUIDE, CHANGELOG (items 11, 12)
 - [x] Packaging, e2e and upgrade from PyPI 0.1.0 (items 8, 13, 14)
 - [x] Every interpreter on this PC (item 10)
-- [ ] Five QA lenses report PASS (item 19)
+- [x] Five QA lenses report PASS (item 19)
 - [ ] Independent reviewer (item 16)
 - [ ] Gates (item 15)
 - [ ] PR open and trace guard CLEAN (item 17); merge and publish left to the maintainer
@@ -25,6 +25,36 @@ Fresh clone of `main` (a53bfd7), CPython 3.13.2, private virtual environment.
 | `mypy --strict src tests` | exit 0 (24 files) |
 | `pytest` | 136 passed in 23 s (the end-to-end module builds a wheel on every run) |
 | doctests | none in the package |
+
+## API review (items 1 to 5)
+
+Kept from 0.1.0: every name, signature and default (`rate_limit(calls, period, *,
+on_limit, clock, sleep)`, `RateLimiter(calls, period, *, clock, sleep)` with `acquire`,
+`try_acquire`, decorator and context-manager use, `RateLimitExceeded(retry_after)`). Added
+since: `KeyedRateLimiter`, `parse_rate`, `acquire_async`, `available`, `retry_after`,
+`reset`, `limit`, `calls`/`period`, `cost`, `timeout`, `key`, `async_sleep`, the `taplimit`
+command. Changed for 1.0.0: strict argument types with documented `TypeError`/`ValueError`
+(GUIDE "Arguments and errors"), `on_limit` typed as a literal, keys checked when a decorator
+is built, the public classes report `taplimit` as their module, bounded messages, ASCII-only
+rate strings with `per` as a word, non-finite clock readings refused. `__all__` lists the
+five public names and `dir(taplimit)` shows nothing else public; `tests/test_contract.py`
+freezes every public signature. Every public class and function, and both `limit()`
+methods, carry examples that `tests/test_docs.py` runs, along with every README and GUIDE
+code block. `mypy --strict src tests` is clean; the public API has no `Any` beyond the
+documented `key` callable of `rate_limit`.
+
+## Behaviour changes against PyPI 0.1.0
+
+The CHANGELOG "Changed (upgrading from 0.1.0)" list is the reference; lenses a and d
+compared it with the real 0.1.0 installed from PyPI. In short: decorating an `async def`
+takes the slot when the call is awaited and waits with `asyncio.sleep` (0.1.0 blocked the
+event loop when the coroutine was created); `calls` of `2.5`, `True`, `Decimal` or `Fraction`
+and `period` of NaN, `inf`, `True` or `Decimal`, all accepted by 0.1.0, now raise; the period
+is stored as a float; the public classes report `taplimit` as their module; the error now
+pickles (0.1.0 crashed); blocking callers queue first come, first served instead of
+retrying; an injected clock must return finite numbers. Everything 0.1.0-style code does
+keeps working: the opt-in end-to-end test runs the same 0.1.0 consumer before and after an
+in-place upgrade from PyPI.
 
 ## Ground truth (item 7)
 
