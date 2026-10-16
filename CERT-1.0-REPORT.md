@@ -11,9 +11,44 @@ Progress:
 - [x] Packaging, e2e and upgrade from PyPI 0.1.0 (items 8, 13, 14)
 - [x] Every interpreter on this PC (item 10)
 - [x] Five QA lenses report PASS (item 19)
-- [ ] Independent reviewer (item 16)
+- [x] Independent reviewer (item 16)
 - [x] Gates (item 15)
-- [ ] PR open and trace guard CLEAN (item 17); merge and publish left to the maintainer
+- [x] PR #2 open and trace guard CLEAN (item 17); merge and publish left to the maintainer
+
+## Scorecard (at the head of PR #2)
+
+| # | Item | Verdict | Evidence |
+| --- | --- | --- | --- |
+| 1 | API reviewed for stability | PASS | every 0.1.0 name and signature kept; changes listed in CHANGELOG 1.0.0 and compared with PyPI 0.1.0 by lenses a and d |
+| 2 | `__all__` exact | PASS | five names, nothing else public (`tests/test_contract.py`) |
+| 3 | Docstrings with runnable examples | PASS | every public name and both `limit()` methods; doctests, README and GUIDE blocks run in `tests/test_docs.py` |
+| 4 | Typed end to end | PASS | `mypy --strict src tests` clean; `py.typed` shipped; strict consumer of every name against the installed wheel (lens d) |
+| 5 | Typed, documented, safe errors | PASS | GUIDE "Arguments and errors"; messages bounded (40-character previews, large numbers by bit size), keys never echoed |
+| 6 | Contract asserts the full promise | PASS | 672 tests: frozen signatures, brute-force model, ground truth, fuzz, hostile input, protocols, CLI |
+| 7 | Real ground truth | PASS | `limits` 5.8.0 and `pyrate-limiter` 4.5.0 output on 4,800 requests, live runs, the fetched `limits` documentation example; re-derived by lens b and the reviewer |
+| 8 | Real e2e incl. PyPI upgrade | PASS | `TAPLIMIT_E2E=1`: wheel in fresh venvs, console script, in-place upgrade from PyPI 0.1.0 (author, lens d, reviewer) |
+| 9 | Seeded fuzz, no crash, hang or blow-up | PASS | seeded model and parser fuzz in the suite; 40,000 waiters queue and cancel in under a second (lens c); hostile strings linear |
+| 10 | Every interpreter on this PC | PASS | 3.10.19, 3.11.5, 3.12.12, 3.13.2, 3.14.2, 3.14.2t from the installed wheel (author, lens d) |
+| 11 | README | PASS | `twine check --strict`; absolute links; problem, verified why, install, quick start, guide and changelog links |
+| 12 | CHANGELOG dated 1.0.0 | PASS | `## [1.0.0] - 2026-10-16` with the stable surface and the changes since 0.1.0 |
+| 13 | pyproject | PASS | 1.0.0 from one source, Production/Stable, 3.10 to 3.14, MIT, Homepage/Source/Issues/Changelog, keywords, no dependencies |
+| 14 | sdist and wheel contents | PASS | wheel: package, `py.typed`, LICENSE; sdist: source, tests, oracle fixture (program output), manifest, scripts, docs; no fetched copy, no notes |
+| 15 | Gates exit 0 alone | PASS | fresh clone, each command on its own (author and reviewer) |
+| 16 | Independent reviewer | PASS | 18 items passed at a49110f, 25 mutants (24 killed, the survivor R19 closed by a contract), report wording on the gate head fixed |
+| 17 | PR, trace guard | ready | PR #2 from `release/1.0.0`, trace guard CLEAN; merge and PyPI publish left to the maintainer |
+| 18 | Mutation rounds | PASS | author 38 (two rounds); lens b 34; lens c 40 + 16; blind lens e 100 + 11; reviewer 25; every survivor closed by a contract or argued equivalent |
+| 19 | Five QA lenses | PASS | a (round 3), b (round 2), c (round 4), d (round 2), e (round 2) |
+
+## Independent reviewer (item 16)
+
+At a49110f, from a fresh clone, every item re-run: gates, doctests and examples, ground truth
+with the fetched copy and with the reference libraries live (249 passed), opt-in e2e with
+the 0.1.0 upgrade, build and archive contents, 3.10.19 and 3.14.2, CHANGELOG, README facts,
+hygiene (no dash character, files at most 185 lines, lower-case subjects without trailers)
+and the trace guard. 25 own mutants on `_window.py` and `_base.py`: 24 killed; R19 (a
+timeout too large for a float read as zero) got a contract in the next commit, which also
+states that the gate figures recorded at 233502a hold at a49110f (only this report changed
+in between).
 
 ## Baseline on 0.2.0 (before any change)
 
@@ -121,7 +156,7 @@ mutants, 34 killed, 2 equivalent.
 | A08 | `_window.py` | walk from the newest off by one | killed | `tests/test_async.py::test_a_cancelled_waiter_returns_its_reservation` |
 | A09 | `_window.py` | reset keeps grants made this instant | killed | `tests/test_edges.py::test_keyed_reset_keeps_reservations_and_drops_idle_keys` |
 | A10 | `_base.py` | bool accepted as a count | killed | `tests/test_validation.py::test_calls_must_be_an_integer[True-RateLimiter]` |
-| A11 | `_base.py` | huge int period becomes zero | equivalent | equivalent: zero and infinity both fail the same range check with the same `ValueError` |
+| A11 | `_base.py` | huge int period becomes zero | equivalent | equivalent for `period` (zero and infinity fail the same range check); on the `timeout` path the reviewer's R19 showed it is not, and a contract now pins a timeout too large for a float |
 | A12 | `_base.py` | infinite period accepted | killed | `tests/test_validation.py::test_period_must_be_finite_and_positive[inf-RateLimiter]` |
 | A13 | `_base.py` | zero timeout refused | killed | `tests/test_fuzz.py::test_every_operation_matches_a_brute_force_model[0]` |
 | A14 | `_base.py` | timeout bound exclusive | killed | `tests/test_fuzz.py::test_every_operation_matches_a_brute_force_model[0]` |

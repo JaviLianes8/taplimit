@@ -1,5 +1,7 @@
 # taplimit
 
+[![Lianes8 Certified](https://lianes8studio.com/certified/lianes8-certified-badge.svg)](https://lianes8studio.com/certified)
+
 Small, typed, thread-safe in-process rate limiter: N calls per period, block or raise,
 sync or async, globally or per key.
 

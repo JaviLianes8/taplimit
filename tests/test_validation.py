@@ -71,6 +71,21 @@ def test_timeout_is_checked_when_a_decorator_is_built() -> None:
         rate_limit(1, 1, on_limit="raise", timeout=1)
 
 
+def test_a_timeout_too_large_for_a_float_waits_like_no_limit() -> None:
+    clock = FakeClock()
+    limiter = RateLimiter(1, 30, clock=clock.time, sleep=clock.sleep)
+    limiter.acquire()
+    limiter.acquire(timeout=10**400)
+    assert clock.now == 30.0
+
+    @rate_limit(1, 30, timeout=10**400, clock=clock.time, sleep=clock.sleep)
+    def ping() -> str:
+        return "pong"
+
+    assert (ping(), ping()) == ("pong", "pong")
+    assert clock.now == 60.0
+
+
 def test_a_key_must_be_callable_when_the_decorator_is_built() -> None:
     message = r"^key must be a callable that receives the call's arguments$"
     with pytest.raises(TypeError, match=message):
