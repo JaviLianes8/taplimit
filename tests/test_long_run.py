@@ -39,6 +39,27 @@ def test_an_interrupted_wait_returns_the_converted_cost(cost: object) -> None:
     assert limiter._win.total == 10
 
 
+@pytest.mark.parametrize("cost", [5.0, _Index(5)])
+def test_a_cancelled_async_wait_returns_the_converted_cost(cost: object) -> None:
+    async def parked(seconds: float) -> None:
+        await asyncio.Event().wait()
+
+    limiter = RateLimiter(10, 60, clock=lambda: 0.0, async_sleep=parked)
+
+    async def main() -> None:
+        assert limiter.try_acquire(10)
+        waiter = asyncio.ensure_future(limiter.acquire_async(cost=cost))  # type: ignore[arg-type]
+        await asyncio.sleep(0)
+        waiter.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await waiter
+
+    asyncio.run(main())
+    assert limiter.available() == 0 and type(limiter.available()) is int
+    assert limiter.retry_after(10) == 60.0
+    assert limiter._win.total == 10
+
+
 @pytest.mark.parametrize("seed", range(6))
 def test_compaction_keeps_every_live_slot(seed: int) -> None:
     rng = random.Random(seed)
