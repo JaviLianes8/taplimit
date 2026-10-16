@@ -121,8 +121,8 @@ class _Base:
 
     def _reserve(
         self, key: Hashable, cost: int, blocking: bool, timeout: float | None
-    ) -> tuple[_Window, float, float]:
-        """Grant or reserve slots under the lock; return (window, ready, wait)."""
+    ) -> tuple[_Window, float, float, int]:
+        """Grant or reserve slots under the lock; return (window, ready, wait, checked cost)."""
         cost = self._check_cost(cost)
         timeout = _check_timeout(blocking, timeout)
         with self._lock:
@@ -133,14 +133,14 @@ class _Base:
             if wait > 0 and (not blocking or (timeout is not None and wait > timeout)):
                 raise RateLimitExceeded(wait, key=key)
             window.take(ready, cost)
-            return window, ready, wait
+            return window, ready, wait, cost
 
     def _give_back(self, window: _Window, ready: float, cost: int) -> None:
         with self._lock:
             window.give_back(ready, cost)
 
     def _acquire(self, key: Hashable, cost: int, blocking: bool, timeout: float | None) -> None:
-        window, ready, wait = self._reserve(key, cost, blocking, timeout)
+        window, ready, wait, cost = self._reserve(key, cost, blocking, timeout)
         if wait <= 0:
             return
         try:
@@ -153,7 +153,7 @@ class _Base:
     async def _acquire_async(
         self, key: Hashable, cost: int, blocking: bool, timeout: float | None
     ) -> None:
-        window, ready, wait = self._reserve(key, cost, blocking, timeout)
+        window, ready, wait, cost = self._reserve(key, cost, blocking, timeout)
         if wait <= 0:
             return
         try:
