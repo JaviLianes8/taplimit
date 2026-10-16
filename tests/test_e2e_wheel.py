@@ -1,4 +1,8 @@
-"""End to end: build the wheel, install it in a fresh venv, use it as an outsider would."""
+"""End to end: build the wheel, install it in a fresh venv, use it as an outsider would.
+
+Opt in with ``TAPLIMIT_E2E=1``: building needs the build backend and the upgrade check
+installs the published 0.1.0 from PyPI, so both reach the network.
+"""
 
 from __future__ import annotations
 
@@ -11,6 +15,37 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
+pytestmark = pytest.mark.skipif(
+    os.environ.get("TAPLIMIT_E2E") != "1", reason="set TAPLIMIT_E2E=1 to build and install"
+)
+
+# Only what 0.1.0 offered, so the same script runs before and after the upgrade.
+OLD_CONSUMER = """
+import taplimit
+from taplimit import RateLimiter, RateLimitExceeded, rate_limit
+
+now = [0.0]
+def sleep(seconds):
+    now[0] += seconds
+
+limiter = RateLimiter(2, 10, clock=lambda: now[0], sleep=sleep)
+assert limiter.try_acquire() and limiter.try_acquire() and not limiter.try_acquire()
+limiter.acquire()
+assert now[0] == 10.0
+with limiter:
+    pass
+
+@rate_limit(1, 5, on_limit="raise", clock=lambda: now[0], sleep=sleep)
+def ping():
+    return "pong"
+
+assert ping() == "pong"
+try:
+    ping()
+except RateLimitExceeded as exc:
+    assert exc.retry_after == 5.0
+print("old api ok", taplimit.__version__)
+"""
 
 CONSUMER = """
 import asyncio, time
@@ -69,6 +104,38 @@ def installed(tmp_path_factory: pytest.TempPathFactory) -> Path:
     return bindir
 
 
+def _venv(where: Path) -> str:
+    venv.EnvBuilder(with_pip=True).create(where)
+    return str(
+        where
+        / ("Scripts" if os.name == "nt" else "bin")
+        / ("python.exe" if os.name == "nt" else "python")
+    )
+
+
+def test_upgrading_from_the_published_0_1_0_keeps_old_code_working(tmp_path: Path) -> None:
+    python = _venv(tmp_path / "venv")
+    script = tmp_path / "old.py"
+    script.write_text(OLD_CONSUMER, encoding="utf-8")
+    _sh(python, "-m", "pip", "install", "-q", "--no-cache-dir", "taplimit==0.1.0")
+    assert _sh(python, str(script), cwd=str(tmp_path)).stdout.split() == [
+        "old",
+        "api",
+        "ok",
+        "0.1.0",
+    ]
+    dist = tmp_path / "dist"
+    _sh(sys.executable, "-m", "pip", "wheel", "--no-deps", "-q", "-w", str(dist), str(ROOT))
+    wheel = next(dist.glob("taplimit-*.whl"))
+    _sh(python, "-m", "pip", "install", "-q", "--no-index", "--upgrade", str(wheel))
+    assert _sh(python, str(script), cwd=str(tmp_path)).stdout.split() == [
+        "old",
+        "api",
+        "ok",
+        "1.0.0",
+    ]
+
+
 def _python(bindir: Path) -> str:
     return str(bindir / ("python.exe" if os.name == "nt" else "python"))
 
@@ -77,7 +144,7 @@ def test_the_installed_wheel_works_for_a_consumer(installed: Path, tmp_path: Pat
     script = tmp_path / "consumer.py"
     script.write_text(CONSUMER, encoding="utf-8")
     result = _sh(_python(installed), str(script), cwd=str(tmp_path))
-    assert "consumer ok" in result.stdout
+    assert result.stdout.split() == ["consumer", "ok", "1.0.0"]
 
 
 def test_the_installed_wheel_ships_type_information(installed: Path) -> None:

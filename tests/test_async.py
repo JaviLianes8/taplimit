@@ -92,17 +92,22 @@ def test_rate_limit_decorates_coroutines_too() -> None:
 
 
 def test_a_cancelled_waiter_returns_its_reservation() -> None:
-    limiter = RateLimiter(1, 60)  # real clock: the waiter is cancelled long before
+    clock = FakeClock()
+
+    async def parked(seconds: float) -> None:
+        await asyncio.Event().wait()  # never set: only cancellation ends this wait
+
+    limiter = RateLimiter(1, 60, clock=clock.time, async_sleep=parked)
 
     async def main() -> None:
         await limiter.acquire_async()
         waiter = asyncio.ensure_future(limiter.acquire_async())
-        await asyncio.sleep(0.01)
-        assert limiter.retry_after() > 60  # a newcomer would queue behind the waiter
+        await asyncio.sleep(0)  # let the waiter reserve its slot and park
+        assert limiter.retry_after() == 120.0  # a newcomer queues behind the waiter
         waiter.cancel()
         with pytest.raises(asyncio.CancelledError):
             await waiter
-        assert limiter.retry_after() <= 60
+        assert limiter.retry_after() == 60.0
 
     asyncio.run(main())
 

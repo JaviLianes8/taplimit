@@ -16,12 +16,31 @@ Consequences:
   seconds after the call that took it, so the long-run rate is `calls / period`.
 - **No boundary effect.** Unlike a fixed window that resets every minute, a burst at the
   end of one window cannot be followed by another at the start of the next.
-- **Memory.** One float per slot granted in the last period plus one per slot reserved
-  by a waiting caller, so `O(calls + waiters)` per window.
+- **Memory.** One entry per acquisition granted in the last period plus one per waiting
+  caller; slots taken together share an entry, so `cost=1_000_000` costs no more than
+  `cost=1`. Each operation does constant work on average, plus a walk over the entries that
+  is bounded by the number of acquisitions in the window.
 
 A token bucket with capacity `calls` refilling at `calls / period` allows the same burst
 but refills continuously; the sliding window is stricter and easier to reason about,
 which is why taplimit uses it.
+
+### The boundary instant
+
+The window is half open: a slot granted at `g` counts for every instant up to, but not
+including, `g + period`. This is the rule the documentation of `limits` states for its
+moving window (a request is allowed once the n-th newest entry "is at least" a period
+old). The in-memory implementations of `limits` 5.8.0 and `pyrate-limiter` 4.5.0 instead
+count the entry at that exact instant too. The test suite replays 60 seeded schedules
+captured from both libraries: taplimit makes every one of their decisions when given a
+period half a unit longer on whole-number times (which turns its half-open window into
+their closed one), reports the same waits, and with the same period differs only at
+instants exactly one period after a grant.
+
+### Clocks
+
+`clock` must never go backwards; the default `time.monotonic` does not. Any unit works as
+long as `period`, `timeout` and the values `clock` returns use the same one.
 
 ## Acquiring
 
@@ -34,11 +53,31 @@ which is why taplimit uses it.
 | `await acquire_async(...)` | returns | like `acquire`, but awaits |
 
 Every form takes `cost=n` to claim `n` slots in one step (`1 <= n <= calls`).
+`timeout=math.inf` waits as long as needed, like no timeout at all.
 
 `RateLimitExceeded.retry_after` is the exact number of seconds until the refused request
 would be granted; `retry_after(cost)` and `available()` answer the same questions without
 trying. A refused call never consumes a slot. With a timeout, taplimit computes the wait
 first and refuses straight away when it is too long, rather than sleeping in vain.
+
+## Arguments and errors
+
+Arguments are checked when they are given: a limiter's when it is built, a decorator's
+when the decorator is created (`limit(...)`, `rate_limit(...)`), and those of `acquire`,
+`try_acquire` and `retry_after` on every call.
+
+| Argument | Accepted | Otherwise |
+| --- | --- | --- |
+| `calls`, `cost` | an integer (`int`, or anything with `__index__`) or a whole `float` such as `10.0`; `calls >= 1`, `1 <= cost <= calls` | `TypeError` for other types, `bool` included; `ValueError` for values out of range |
+| `period` | a real number of seconds (`int`, `float`, `Fraction`), finite and greater than 0; stored as a `float` | `TypeError` for other types, `bool` and `Decimal` included; `ValueError` for 0, negatives, NaN and infinities |
+| `timeout` | `None` or a real number of seconds, 0 or more (`math.inf` included), only with blocking | `TypeError` for other types; `ValueError` for negatives, NaN, or a timeout without blocking |
+| `on_limit` | `"block"` or `"raise"`; a timeout only with `"block"` | `ValueError` |
+| rate strings | see [Rate strings](#rate-strings) | `ValueError`, or `TypeError` for a non-string |
+
+`RateLimitExceeded` is the only error a well-formed call raises, when it chose not to wait
+(`blocking=False`, `on_limit="raise"`) or the wait would exceed `timeout`. It subclasses
+`Exception`, carries `retry_after` and `key`, and pickles with both. Messages are short and
+never echo a key; a rate string is quoted to at most 40 characters and a type name to 40.
 
 ## Fairness and thread safety
 
@@ -105,12 +144,15 @@ except RateLimitExceeded as exc:
 
 The key function receives exactly the decorated call's arguments, and its parameters
 must match the function's so that type checkers can verify it. `rate_limit(..., key=...)`
-builds the same thing in one line.
+builds the same thing in one line. `reset(key)` forgets one key and `reset()` every key,
+so a key that is literally `None` can only be reset together with the others.
 
 ## Rate strings
 
 `parse_rate` accepts `CALLS/UNIT` or `CALLS per UNIT`; the unit is `s`, `m`, `h` or `d`
-(also `sec`, `min`, `hour`, `day` and plurals) and may carry a multiplier:
+(also `sec`, `second`, `min`, `minute`, `hr`, `hour`, `day` and plurals) and may carry a
+multiplier. Only ASCII digits, letters and spaces are read, case does not matter, and
+`ms` is refused rather than read as minutes:
 
 ```python
 from taplimit import parse_rate
