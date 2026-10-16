@@ -70,13 +70,13 @@ class RateLimiter(_Base):
         exception's ``retry_after`` says how long until they would be. A refused call
         never consumes a slot, and a wait interrupted by an exception gives it back.
         """
-        self._acquire(None, cost, blocking, timeout, None)
+        self._acquire(None, cost, blocking, timeout)
 
     async def acquire_async(
         self, *, blocking: bool = True, timeout: float | None = None, cost: int = 1
     ) -> None:
         """Like ``acquire`` but waits with ``await``; cancellation returns the slots."""
-        await self._acquire_async(None, cost, blocking, timeout, None)
+        await self._acquire_async(None, cost, blocking, timeout)
 
     def try_acquire(self, cost: int = 1) -> bool:
         """Take ``cost`` slots without waiting. Return True if they were free."""
@@ -141,10 +141,10 @@ class RateLimiter(_Base):
         timeout = _check_timeout(blocking, timeout)
 
         def before(*_args: Any, **_kwargs: Any) -> None:
-            self._acquire(None, cost, blocking, timeout, None)
+            self._acquire(None, cost, blocking, timeout)
 
         async def before_async(*_args: Any, **_kwargs: Any) -> None:
-            await self._acquire_async(None, cost, blocking, timeout, None)
+            await self._acquire_async(None, cost, blocking, timeout)
 
         def decorator(func: Callable[P, R]) -> Callable[P, R]:
             return wrap(func, before, before_async)

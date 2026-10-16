@@ -129,7 +129,7 @@ def test_queueing_many_waiters_does_linear_work() -> None:
     _CountingDeque.steps = 0
     waiters = 5000
     for _ in range(waiters):
-        limiter._reserve(None, 1, True, None, None)  # what each blocking caller does first
+        limiter._reserve(None, 1, True, None)  # what each blocking caller does first
     assert limiter.retry_after() == waiters
     assert _CountingDeque.steps <= 3 * waiters
 

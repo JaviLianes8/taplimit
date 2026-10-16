@@ -82,6 +82,7 @@ class _Window:
 
     def give_back(self, at: float, cost: int) -> None:
         """Drop ``cost`` slots granted at ``at``: an abandoned reservation."""
+        # Equal times are always adjacent and merged by ``take``, so one run holds them all.
         runs = self.runs
         for offset, run in enumerate(reversed(runs)):
             if run.stamp == at:

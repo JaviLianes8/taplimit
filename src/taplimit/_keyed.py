@@ -67,13 +67,13 @@ class KeyedRateLimiter(_Base, Generic[K]):
 
         A refusal raises RateLimitExceeded whose ``key`` is the refused key.
         """
-        self._acquire(key, cost, blocking, timeout, key)
+        self._acquire(key, cost, blocking, timeout)
 
     async def acquire_async(
         self, key: K, *, blocking: bool = True, timeout: float | None = None, cost: int = 1
     ) -> None:
         """Like ``acquire`` but waits with ``await``; cancellation returns the slots."""
-        await self._acquire_async(key, cost, blocking, timeout, key)
+        await self._acquire_async(key, cost, blocking, timeout)
 
     def try_acquire(self, key: K, cost: int = 1) -> bool:
         """Take ``cost`` slots for ``key`` without waiting. Return True on success."""
@@ -127,11 +127,11 @@ class KeyedRateLimiter(_Base, Generic[K]):
 
         def before(*args: P.args, **kwargs: P.kwargs) -> None:
             k = key(*args, **kwargs)
-            self._acquire(k, cost, blocking, timeout, k)
+            self._acquire(k, cost, blocking, timeout)
 
         async def before_async(*args: P.args, **kwargs: P.kwargs) -> None:
             k = key(*args, **kwargs)
-            await self._acquire_async(k, cost, blocking, timeout, k)
+            await self._acquire_async(k, cost, blocking, timeout)
 
         def decorator(func: Callable[P, R]) -> Callable[P, R]:
             return wrap(func, before, before_async)
