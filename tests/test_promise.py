@@ -110,7 +110,7 @@ def test_waiters_are_served_first_come_first_served() -> None:
     threads = {}
     for name in ("first", "second"):
         entered[name], release[name] = threading.Event(), threading.Event()
-        threads[name] = threading.Thread(target=limiter.acquire, name=name)
+        threads[name] = threading.Thread(target=limiter.acquire, name=name, daemon=True)
         threads[name].start()
         assert entered[name].wait(5)
     assert limiter.retry_after() == 30.0  # a newcomer queues behind both reservations
