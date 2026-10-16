@@ -1,0 +1,9 @@
+{
+ "limits-5.8.0-strategies.rst": {
+  "fetched": "2026-10-16",
+  "licence": "MIT",
+  "sha256": "d1dae8159c0d659ceb7b3406da5052672e749592152e263706589f5d8d4e2fb5",
+  "size": 5062,
+  "url": "https://raw.githubusercontent.com/alisaifee/limits/cc5eafcc45488d9995d738e4de498e6d74dc6e9c/doc/source/strategies.rst"
+ }
+}

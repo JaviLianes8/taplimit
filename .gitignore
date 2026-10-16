@@ -10,3 +10,7 @@ dist/
 .ruff_cache/
 .coverage
 htmlcov/
+
+# Third-party copies fetched by scripts/fetch_sources.py; only the manifest is tracked.
+tests/sources/*
+!tests/sources/MANIFEST.json
