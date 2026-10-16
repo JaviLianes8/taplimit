@@ -201,6 +201,8 @@ own: `ruff format --check .`, `ruff check .`, `mypy --strict src` and `mypy --st
 tests` exit 0; `pytest` 661 passed, 10 skipped; `TAPLIMIT_E2E=1 pytest
 tests/test_e2e_wheel.py` 4 passed (wheel in a fresh venv, console script, upgrade from PyPI
 0.1.0); `python -m build` and `twine check --strict` pass for the wheel and the sdist.
+Re-run at 4687e30 (after the last contract): every gate exits 0, `pytest` 662 passed and
+10 skipped, the opt-in e2e 4 passed, build and `twine check --strict` pass.
 
 ## QA lenses (item 19)
 
