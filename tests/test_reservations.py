@@ -84,3 +84,23 @@ def test_async_with_waits_with_the_async_sleep() -> None:
 
     asyncio.run(main())
     assert awaited == [5.0] and clock.slept == []
+
+
+def test_a_waiter_cancelled_after_a_reset_never_returns_a_newer_grant() -> None:
+    now = [0.0]
+    limiter = RateLimiter(1, 10, clock=lambda: now[0], async_sleep=_parked)
+
+    async def main() -> None:
+        assert limiter.try_acquire()
+        waiter = asyncio.ensure_future(limiter.acquire_async())
+        await asyncio.sleep(0)  # reserved for t = 10
+        now[0] = 10.0
+        limiter.reset()  # drops the reservation along with the past grant
+        assert limiter.try_acquire()  # a newcomer takes the slot at the same instant
+        waiter.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await waiter
+        assert limiter.available() == 0  # the newcomer's slot is still counted
+        assert not limiter.try_acquire()
+
+    asyncio.run(main())

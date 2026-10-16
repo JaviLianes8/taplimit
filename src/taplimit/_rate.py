@@ -20,7 +20,9 @@ _UNITS = {
 }
 
 _RATE = re.compile(
-    r"^\s*(?P<calls>\d+)\s*(?:/|per)\s*(?P<mult>\d+(?:\.\d+)?|\.\d+)?\s*(?P<unit>[a-z]+)\s*$",
+    # "per" must stand alone: "10 per s" and "5per2s" parse, "10pers" does not.
+    r"^\s*(?P<calls>\d+)\s*(?:/|(?<![a-z])per(?![a-z]))"
+    r"\s*(?P<mult>\d+(?:\.\d+)?|\.\d+)?\s*(?P<unit>[a-z]+)\s*$",
     re.IGNORECASE | re.ASCII,
 )
 

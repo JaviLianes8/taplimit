@@ -21,7 +21,7 @@ def test_generated_rate_strings_parse_to_their_meaning(seed: int) -> None:
     for _ in range(200):
         calls, mult = rng.randint(1, 10**6), rng.choice(["", "2", "15", "0.5", ".25", "1.75"])
         unit = rng.choice(UNITS)
-        sep = rng.choice(["/", " / ", "per", " per ", " PER ", "Per"])
+        sep = rng.choice(["/", " / ", "per ", " per ", " PER ", "Per "])
         cased = "".join(c.upper() if rng.random() < 0.3 else c for c in unit)
         lead, tail = rng.choice(["", " ", chr(9)]), rng.choice(["", " ", chr(10)])
         text = f"{lead}{calls}{sep}{mult}{cased}{tail}"
@@ -53,3 +53,14 @@ def test_long_hostile_strings_fail_fast(text: str) -> None:
     with pytest.raises(ValueError) as info:
         parse_rate(text)
     assert len(str(info.value)) < 140
+
+
+@pytest.mark.parametrize("text", ["10pers", "10persec", "10 pers", "10/pers", "5 super s"])
+def test_per_must_stand_alone(text: str) -> None:
+    with pytest.raises(ValueError):
+        parse_rate(text)
+
+
+def test_per_may_touch_digits() -> None:
+    assert parse_rate("5per2s") == (5, 2.0)
+    assert parse_rate("10 PER minute") == (10, 60.0)

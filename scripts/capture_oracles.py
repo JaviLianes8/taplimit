@@ -103,7 +103,8 @@ def main() -> int:
         "cases": cases,
     }
     OUT.parent.mkdir(parents=True, exist_ok=True)
-    OUT.write_text(json.dumps(doc, separators=(",", ":")) + "\n", encoding="utf-8")
+    text = json.dumps(doc, separators=(",", ":")) + "\n"
+    OUT.write_text(text, encoding="utf-8", newline="\n")
     print(f"wrote {len(cases)} schedules to {OUT}", file=sys.stderr)
     return 0
 

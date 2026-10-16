@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from collections import deque
 
 
@@ -24,13 +25,14 @@ class _Window:
     number of acquisitions, not their cost. The owner guards every method with its own lock.
     """
 
-    __slots__ = ("calls", "period", "runs", "total")
+    __slots__ = ("calls", "cleared", "period", "runs", "total")
 
     def __init__(self, calls: int, period: float) -> None:
         self.calls = calls
         self.period = period
         self.runs: deque[_Run] = deque()
         self.total = 0
+        self.cleared = -math.inf  # the latest instant up to which ``clear`` dropped grants
 
     def _drop_until(self, limit: float) -> None:
         runs = self.runs
@@ -40,6 +42,7 @@ class _Window:
     def clear(self, now: float) -> None:
         """Forget past grants but keep reservations of callers still waiting."""
         self._drop_until(now)
+        self.cleared = max(self.cleared, now)
 
     def purge(self, now: float) -> None:
         self._drop_until(now - self.period)
@@ -82,6 +85,8 @@ class _Window:
 
     def give_back(self, at: float, cost: int) -> None:
         """Drop ``cost`` slots granted at ``at``: an abandoned reservation."""
+        if at <= self.cleared:
+            return  # a reset already dropped it; a newer grant may share the instant
         # Equal times are always adjacent and merged by ``take``, so one run holds them all.
         runs = self.runs
         for offset, run in enumerate(reversed(runs)):

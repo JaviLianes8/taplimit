@@ -34,8 +34,8 @@ old). The in-memory implementations of `limits` 5.8.0 and `pyrate-limiter` 4.5.0
 count the entry at that exact instant too. The test suite replays 60 seeded schedules
 captured from both libraries: taplimit makes every one of their decisions when given a
 period half a unit longer on whole-number times (which turns its half-open window into
-their closed one), reports the same waits, and with the same period differs only at
-instants exactly one period after a grant.
+their closed one), reports the same waits less that half unit, and with the same period
+differs only at instants exactly one period after a grant.
 
 ### Clocks
 
@@ -154,7 +154,8 @@ so a key that is literally `None` can only be reset together with the others.
 `parse_rate` accepts `CALLS/UNIT` or `CALLS per UNIT`; the unit is `s`, `m`, `h` or `d`
 (also `sec`, `second`, `min`, `minute`, `hr`, `hour`, `day` and plurals) and may carry a
 multiplier. Only ASCII digits, letters and spaces are read, case does not matter, and
-`ms` is refused rather than read as minutes:
+`ms` is refused rather than read as minutes. `per` must not touch a letter, so `10pers` is
+refused while `5per2s` reads as five per two seconds:
 
 ```python
 from taplimit import parse_rate
