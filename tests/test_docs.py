@@ -62,6 +62,6 @@ def test_the_readme_links_are_absolute() -> None:
 def test_no_doc_uses_an_em_dash_or_names_a_missing_file() -> None:
     for name in ["README.md", "GUIDE.md", "CHANGELOG.md", "CONTRIBUTING.md"]:
         text = (ROOT / name).read_text("utf-8")
-        assert "—" not in text, name
+        assert "\u2014" not in text, name
     for path in ["GUIDE.md", "CHANGELOG.md", "LICENSE"]:
         assert (ROOT / path).is_file()
