@@ -69,7 +69,9 @@ def test_a_decorated_coroutine_waits_with_the_async_sleep() -> None:
         assert [await ping(), await ping()] == ["pong", "pong"]
         assert [await pong(), await pong()] == ["ping", "ping"]
 
-    asyncio.run(main_())
+    # The bound only turns a regression (a real sleep against a frozen fake clock) into a fast
+    # failure; with the injected sleep the whole run takes no real time.
+    asyncio.run(asyncio.wait_for(main_(), timeout=10))
     assert clock.awaited == [5.0, 5.0]
 
 
