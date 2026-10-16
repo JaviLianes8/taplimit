@@ -50,7 +50,7 @@ path = "src/taplimit/__init__.py"
 packages = ["src/taplimit"]
 
 [tool.hatch.build.targets.sdist]
-exclude = ["IMPROVEMENTS-round.md", "CERT-1.0-REPORT.md", "tests/sources/*.html", ".github"]
+exclude = ["IMPROVEMENTS-round.md", "CERT-1.0-REPORT.md", "tests/sources/*.rst", "tests/sources/*.html", ".github"]
 
 [tool.ruff]
 line-length = 100
