@@ -6,7 +6,7 @@ Progress:
 - [x] API review and 1.0.0 API changes (item 1)
 - [x] Ground truth: fetched documentation and established implementations run live (item 7)
 - [x] Errors, typing, docstrings and doctests (items 2 to 5)
-- [ ] Contract, fuzz and author mutation round (items 6, 9, 18)
+- [x] Contract, fuzz and author mutation round (items 6, 9, 18)
 - [x] Docs: README, GUIDE, CHANGELOG (items 11, 12)
 - [x] Packaging, e2e and upgrade from PyPI 0.1.0 (items 8, 13, 14)
 - [ ] Every interpreter on this PC (item 10)
@@ -67,3 +67,55 @@ message; an infinite period was accepted and made a blocking call raise `Overflo
 `parse_rate` accepted non-ASCII digits and spaces and echoed whole inputs in its errors;
 a timeout given with `blocking=False` to `limit()` was only rejected on the first call; the
 public classes reported private module names.
+
+## Author mutation round (item 18)
+
+Each mutant applied alone to a fresh clone, `pytest -x` with no bytecode and a 240 second
+limit per run (a hang counts as killed), baseline green before and after, on Elena's PC
+under CPython 3.14.2. Round 1 at 84a7907: of A01 to A36, 28 killed and 8 survived (A04,
+A05, A07, A11, A19, A24, A34, A35); A37 failed its test but left a waiting thread that kept
+the run from exiting, so the round stopped there. The survivors got contracts in 5dedeb0
+(`tests/test_reservations.py`), test threads became daemons in 1a12af0, and A19 showed the
+refused-key argument always equalled the key, so it was removed. Round 2 at 1a12af0: 36 applicable
+mutants, 34 killed, 2 equivalent.
+
+| Id | File | Mutation | Round 2 | Caught by |
+| --- | --- | --- | --- | --- |
+| A01 | `_window.py` | window closed at the far end | killed | `tests/test_edges.py::test_keyed_reset_keeps_reservations_and_drops_idle_keys` |
+| A02 | `_window.py` | no queueing behind reservations | killed | `tests/test_fuzz.py::test_every_operation_matches_a_brute_force_model[0]` |
+| A03 | `_window.py` | blocker off by one | killed | `tests/test_async.py::test_acquire_async_waits_for_the_slot` |
+| A04 | `_window.py` | runs never merged | killed | `tests/test_reservations.py::test_acquisitions_at_one_instant_share_one_entry` |
+| A05 | `_window.py` | give_back drops the whole run | killed | `tests/test_reservations.py::test_cancelling_one_of_two_waiters_at_the_same_instant_keeps_the_other` |
+| A06 | `_window.py` | give_back forgets the total | killed | `tests/test_fuzz.py::test_every_operation_matches_a_brute_force_model[0]` |
+| A07 | `_window.py` | available ignores reservations | killed | `tests/test_reservations.py::test_cancelling_one_of_two_waiters_at_the_same_instant_keeps_the_other` |
+| A08 | `_window.py` | walk from the newest off by one | killed | `tests/test_async.py::test_a_cancelled_waiter_returns_its_reservation` |
+| A09 | `_window.py` | reset keeps grants made this instant | killed | `tests/test_edges.py::test_keyed_reset_keeps_reservations_and_drops_idle_keys` |
+| A10 | `_base.py` | bool accepted as a count | killed | `tests/test_validation.py::test_calls_must_be_an_integer[True-RateLimiter]` |
+| A11 | `_base.py` | huge int period becomes zero | equivalent | equivalent: zero and infinity both fail the same range check with the same `ValueError` |
+| A12 | `_base.py` | infinite period accepted | killed | `tests/test_validation.py::test_period_must_be_finite_and_positive[inf-RateLimiter]` |
+| A13 | `_base.py` | zero timeout refused | killed | `tests/test_fuzz.py::test_every_operation_matches_a_brute_force_model[0]` |
+| A14 | `_base.py` | timeout bound exclusive | killed | `tests/test_fuzz.py::test_every_operation_matches_a_brute_force_model[0]` |
+| A15 | `_base.py` | interrupted wait keeps the slot | killed | `tests/test_fuzz.py::test_every_operation_matches_a_brute_force_model[0]` |
+| A16 | `_base.py` | cancelled coroutine keeps the slot | killed | `tests/test_async.py::test_a_cancelled_waiter_returns_its_reservation` |
+| A17 | `_base.py` | try_acquire never succeeds | killed | `tests/test_cli.py::test_pump_drop_mode_samples_without_waiting` |
+| A18 | `_base.py` | cost one above calls accepted | killed | `tests/test_keyed.py::test_repr_and_validation` |
+| A19 | `_base.py` | refused key from the wrong argument | n/a | code removed (survived round 1: the argument always equalled the key) |
+| A20 | `_keyed.py` | sweep twice as rare | killed | `tests/test_keyed.py::test_idle_keys_are_evicted_after_a_period` |
+| A21 | `_keyed.py` | queries start tracking keys | killed | `tests/test_docs.py::test_module_doctests_pass[taplimit]` |
+| A22 | `_keyed.py` | reset keeps empty windows | killed | `tests/test_edges.py::test_keyed_reset_keeps_reservations_and_drops_idle_keys` |
+| A23 | `_keyed.py` | decorated refusal loses the key | n/a | code removed with A19 (killed in round 1 by `tests/test_keyed.py::test_limit_derives_the_key_from_the_arguments`) |
+| A24 | `_decorator.py` | unknown on_limit blocks (guarded) | equivalent | equivalent: `on_limit` is already restricted to "block" or "raise" two lines above |
+| A25 | `_decorator.py` | timeout with raise accepted | killed | `tests/test_validation.py::test_timeout_is_checked_when_a_decorator_is_built` |
+| A26 | `_rate.py` | ms read as minutes | killed | `tests/test_docs.py::test_module_doctests_pass[taplimit._rate]` |
+| A27 | `_rate.py` | hour unit wrong | killed | `tests/test_edges.py::test_milliseconds_are_not_mistaken_for_minutes` |
+| A28 | `_rate.py` | preview one longer | killed | `tests/test_validation.py::test_rate_messages_show_at_most_forty_characters` |
+| A29 | `_rate.py` | unicode digits accepted | killed | `tests/test_validation.py::test_parse_rate_reads_ascii_only[\u0661\u0660/s]` |
+| A30 | `_rate.py` | fractional multiplier refused | killed | `tests/test_fuzz_rate.py::test_generated_rate_strings_parse_to_their_meaning[0]` |
+| A31 | `_errors.py` | pickle drops the key | killed | `tests/test_contract.py::test_the_error_is_an_exception_with_its_fields_and_pickles` |
+| A32 | `_cli.py` | dropped lines not counted | killed | `tests/test_cli.py::test_pump_drop_mode_samples_without_waiting` |
+| A33 | `_cli.py` | ctrl-c exit status | killed | `tests/test_edges.py::test_ctrl_c_reports_dropped_lines_and_exits_130` |
+| A34 | `_wrap.py` | async __call__ objects not awaited | killed | `tests/test_reservations.py::test_an_async_callable_object_takes_its_slot_when_awaited` |
+| A35 | `_limiter.py` | async with blocks the loop | killed | `tests/test_reservations.py::test_async_with_waits_with_the_async_sleep` |
+| A36 | `__init__.py` | classes keep private module names | killed | `tests/test_contract.py::test_classes_report_the_package_as_their_module` |
+| A37 | `_limiter.py` | reset drops reservations | killed | `tests/test_edges.py::test_reset_during_a_wait_keeps_the_limit` |
+| A38 | `_window.py` | available one short | killed | `tests/test_docs.py::test_module_doctests_pass[taplimit]` |
