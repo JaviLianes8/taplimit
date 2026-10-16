@@ -6,8 +6,6 @@
 [True, True, True, False]
 """
 
-from __future__ import annotations
-
 from ._decorator import rate_limit
 from ._errors import RateLimitExceeded
 from ._keyed import KeyedRateLimiter

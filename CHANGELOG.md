@@ -46,9 +46,9 @@ the error types and the documented behaviour change only with a new major versio
 - Decorating an `async def` function now takes the slot when the call is awaited, waiting
   with `asyncio.sleep`, instead of blocking the event loop with `time.sleep` when the
   coroutine is created. A coroutine that is never awaited no longer takes a slot.
-- `calls` must be an integer or a whole float such as `10.0`: `2.5` and `True`, which
-  0.1.0 accepted, raise `TypeError` when the limiter is built.
-- `period` must be a finite real number of seconds greater than 0: NaN and infinities,
+- `calls` must be an integer or a whole float such as `10.0`: `2.5`, `True`, `Decimal`
+  and `Fraction` counts, which 0.1.0 accepted, raise `TypeError` when the limiter is built.
+- `period` must be a finite real number of seconds greater than 0: NaN and `inf`,
   which 0.1.0 accepted, raise `ValueError`; `bool`, `Decimal` and strings raise `TypeError`.
   The period is stored as a `float`, so `limiter.period` is `10.0` for `period=10`.
 - `RateLimitExceeded`, `RateLimiter` and `KeyedRateLimiter` report `taplimit` as their

@@ -136,6 +136,16 @@ class RateLimiter(_Base):
         """Return a decorator whose calls each ``acquire`` with these options.
 
         Works on plain and ``async def`` functions alike and preserves the signature.
+
+        >>> limiter = RateLimiter(1, 60, clock=lambda: 0.0)
+        >>> @limiter.limit(blocking=False)
+        ... def ping() -> str:
+        ...     return "pong"
+        >>> ping()
+        'pong'
+        >>> limiter.reset()  # forget the grant
+        >>> ping()
+        'pong'
         """
         cost = self._check_cost(cost)
         timeout = _check_timeout(blocking, timeout)

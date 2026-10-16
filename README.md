@@ -150,7 +150,8 @@ took it, so a burst of up to `calls` is allowed at once and the sustained rate i
 counter does. Waiting callers reserve their slot and are served first come, first served.
 All state is guarded by a lock, so one limiter is safe to share across threads and
 coroutines. The decisions are checked against the moving-window limiter of `limits` and the
-in-memory bucket of `pyrate-limiter`. The
+in-memory bucket of `pyrate-limiter`, which differ only at the boundary instant (the guide
+explains). The
 [guide](https://github.com/JaviLianes8/taplimit/blob/main/GUIDE.md) states every
 guarantee in detail.
 

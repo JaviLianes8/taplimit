@@ -61,7 +61,7 @@ SIGNATURES: dict[str, Spec] = {
 def test_all_lists_exactly_the_public_api() -> None:
     assert sorted(taplimit.__all__) == sorted(PUBLIC_API)
     public = {n for n in dir(taplimit) if not n.startswith("_")}
-    assert public - set(PUBLIC_API) <= {"annotations"}
+    assert public == set(PUBLIC_API)
 
 
 def test_every_exported_name_resolves() -> None:

@@ -142,9 +142,11 @@ except RateLimitExceeded as exc:
     print(f"{exc.key} must wait {exc.retry_after:.0f}s")
 ```
 
-The key function receives exactly the decorated call's arguments, and its parameters
-must match the function's so that type checkers can verify it. `rate_limit(..., key=...)`
-builds the same thing in one line. `reset(key)` forgets one key and `reset()` every key,
+The key function receives exactly the decorated call's arguments, and with `limit` type
+checkers verify that its parameters match the function's. `rate_limit(..., key=...)`
+builds the same thing in one line; there the decorated function keeps its exact signature
+but the key's parameters are not checked against it. A key that is not callable is a
+`TypeError` when the decorator is created. `reset(key)` forgets one key and `reset()` every key,
 so a key that is literally `None` can only be reset together with the others.
 
 ## Rate strings

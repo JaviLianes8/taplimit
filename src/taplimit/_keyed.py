@@ -121,7 +121,20 @@ class KeyedRateLimiter(_Base, Generic[K]):
 
         ``key`` receives exactly the arguments of the decorated call. Plain and
         ``async def`` functions are both supported and keep their signature.
+
+        >>> limits: KeyedRateLimiter[str] = KeyedRateLimiter(1, 60, clock=lambda: 0.0)
+        >>> @limits.limit(lambda user: user, blocking=False)
+        ... def greet(user: str) -> str:
+        ...     return f"hi {user}"
+        >>> greet("ann"), greet("bob")
+        ('hi ann', 'hi bob')
+        >>> greet("ann")
+        Traceback (most recent call last):
+        ...
+        taplimit.RateLimitExceeded: rate limit exceeded, retry after 60.000s
         """
+        if not callable(key):
+            raise TypeError("key must be a callable that receives the call's arguments")
         cost = self._check_cost(cost)
         timeout = _check_timeout(blocking, timeout)
 

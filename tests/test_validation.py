@@ -63,12 +63,20 @@ def test_timeout_is_checked_when_a_decorator_is_built() -> None:
     limiter, keyed = RateLimiter(1, 1), KeyedRateLimiter[str](1, 1)
     with pytest.raises(ValueError, match=r"non-blocking"):
         limiter.limit(blocking=False, timeout=1)
-    with pytest.raises(ValueError, match=r"must not be negative"):
+    with pytest.raises(ValueError, match=r"^timeout must be 0 or more seconds$"):
         keyed.limit(lambda: "k", timeout=-1)
-    with pytest.raises(ValueError, match=r"must not be negative"):
+    with pytest.raises(ValueError, match=r"^timeout must be 0 or more seconds$"):
         rate_limit(1, 1, timeout=math.nan)
     with pytest.raises(ValueError, match='only applies when on_limit is "block"'):
         rate_limit(1, 1, on_limit="raise", timeout=1)
+
+
+def test_a_key_must_be_callable_when_the_decorator_is_built() -> None:
+    message = r"^key must be a callable that receives the call's arguments$"
+    with pytest.raises(TypeError, match=message):
+        rate_limit(1, 1, key="user")  # type: ignore[arg-type]
+    with pytest.raises(TypeError, match=message):
+        KeyedRateLimiter[str](1, 1).limit("user")  # type: ignore[arg-type]
 
 
 def test_an_infinite_timeout_waits_as_long_as_needed() -> None:

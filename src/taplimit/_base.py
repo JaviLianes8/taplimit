@@ -59,7 +59,7 @@ def _check_timeout(blocking: bool, timeout: float | None) -> float | None:
         raise ValueError("cannot specify a timeout for a non-blocking acquire")
     seconds = _as_seconds(timeout, "timeout")
     if not seconds >= 0:  # also rejects NaN
-        raise ValueError("timeout must not be negative")
+        raise ValueError("timeout must be 0 or more seconds")
     return seconds
 
 
