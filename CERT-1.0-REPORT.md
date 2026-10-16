@@ -9,7 +9,7 @@ Progress:
 - [x] Contract, fuzz and author mutation round (items 6, 9, 18)
 - [x] Docs: README, GUIDE, CHANGELOG (items 11, 12)
 - [x] Packaging, e2e and upgrade from PyPI 0.1.0 (items 8, 13, 14)
-- [ ] Every interpreter on this PC (item 10)
+- [x] Every interpreter on this PC (item 10)
 - [ ] Five QA lenses report PASS (item 19)
 - [ ] Independent reviewer (item 16)
 - [ ] Gates (item 15)
@@ -119,3 +119,12 @@ mutants, 34 killed, 2 equivalent.
 | A36 | `__init__.py` | classes keep private module names | killed | `tests/test_contract.py::test_classes_report_the_package_as_their_module` |
 | A37 | `_limiter.py` | reset drops reservations | killed | `tests/test_edges.py::test_reset_during_a_wait_keeps_the_limit` |
 | A38 | `_window.py` | available one short | killed | `tests/test_docs.py::test_module_doctests_pass[taplimit]` |
+
+## Supported Pythons (item 10)
+
+`requires-python = ">=3.10"`. The suite from the extracted sdist, with `src` removed so it
+imports the installed wheel, on every interpreter of this PC from 3.10 up (at be199b0):
+CPython 3.10.19, 3.11.5, 3.12.12, 3.13.2, 3.14.2 and 3.14.2 free-threaded, 619 passed and
+10 skipped on each (five live-oracle tests without the reference libraries, four opt-in
+end-to-end tests, the fetched-documentation test without its copy). 3.8 and 3.9 are also
+installed but below `requires-python`.
