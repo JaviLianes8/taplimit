@@ -45,7 +45,7 @@ class KeyedRateLimiter(_Base, Generic[K]):
         self._last_sweep = clock()
 
     def _window(self, key: Hashable, now: float) -> _Window:
-        if now - self._last_sweep >= self._period:
+        if not 0 <= now - self._last_sweep < self._period:  # also after a clock step back
             self._last_sweep = now
             idle = [k for k, w in self._windows.items() if w.idle(now)]
             for k in idle:
@@ -93,12 +93,12 @@ class KeyedRateLimiter(_Base, Generic[K]):
         As with RateLimiter.reset, callers already waiting keep their reserved slots.
         """
         with self._lock:
-            now = self._clock()
+            now = self._now()
             for k in list(self._windows) if key is None else [key]:
                 window = self._windows.get(k)
                 if window is not None:
                     window.clear(now)
-                    if not window.runs:
+                    if not window.total:
                         del self._windows[k]
 
     def __len__(self) -> int:

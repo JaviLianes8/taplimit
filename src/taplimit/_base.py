@@ -18,6 +18,15 @@ Sleep = Callable[[float], None]
 AsyncSleep = Callable[[float], Awaitable[None]]
 
 
+# Waits longer than a day are taken in steps, which every platform's sleep accepts.
+_LONGEST_SLEEP = 86400.0
+
+
+def _shown(number: int) -> str:
+    # Keep messages short however large the number (and below the int-to-str digit limit).
+    return str(number) if abs(number) < 10**15 else f"a {number.bit_length()}-bit number"
+
+
 def _kind(value: object) -> str:
     return type(value).__name__[:40]
 
@@ -90,6 +99,12 @@ class _Base:
         """The length of the sliding window, in seconds."""
         return self._period
 
+    def _now(self) -> float:
+        now = self._clock()
+        if not math.isfinite(now):
+            raise ValueError(f"the clock returned {now!r}; it must return finite seconds")
+        return now
+
     def _window(self, key: Hashable, now: float) -> _Window:
         raise NotImplementedError
 
@@ -101,7 +116,7 @@ class _Base:
         if cost < 1:
             raise ValueError("cost must be at least 1")
         if cost > self._calls:
-            raise ValueError(f"cost {cost} exceeds the {self._calls} slots per period")
+            raise ValueError(f"cost {_shown(cost)} exceeds calls ({_shown(self._calls)})")
         return cost
 
     def _reserve(
@@ -111,7 +126,7 @@ class _Base:
         cost = self._check_cost(cost)
         timeout = _check_timeout(blocking, timeout)
         with self._lock:
-            now = self._clock()
+            now = self._now()
             window = self._window(key, now)
             ready = window.ready_at(now, cost)
             wait = ready - now
@@ -129,8 +144,8 @@ class _Base:
         if wait <= 0:
             return
         try:
-            while (remaining := ready - self._clock()) > 0:
-                self._sleep(remaining)
+            while (remaining := ready - self._now()) > 0:
+                self._sleep(min(remaining, _LONGEST_SLEEP))
         except BaseException:
             self._give_back(window, ready, cost)
             raise
@@ -142,8 +157,8 @@ class _Base:
         if wait <= 0:
             return
         try:
-            while (remaining := ready - self._clock()) > 0:
-                await self._async_sleep(remaining)
+            while (remaining := ready - self._now()) > 0:
+                await self._async_sleep(min(remaining, _LONGEST_SLEEP))
         except BaseException:  # includes cancellation: the reserved slot is returned
             self._give_back(window, ready, cost)
             raise
@@ -151,7 +166,7 @@ class _Base:
     def _try(self, key: Hashable, cost: int) -> bool:
         cost = self._check_cost(cost)
         with self._lock:
-            now = self._clock()
+            now = self._now()
             window = self._window(key, now)
             if window.ready_at(now, cost) > now:
                 return False
@@ -160,11 +175,11 @@ class _Base:
 
     def _available(self, key: Hashable) -> int:
         with self._lock:
-            now = self._clock()
+            now = self._now()
             return self._peek(key, now).available(now)
 
     def _retry_after(self, key: Hashable, cost: int) -> float:
         cost = self._check_cost(cost)
         with self._lock:
-            now = self._clock()
+            now = self._now()
             return max(0.0, self._peek(key, now).ready_at(now, cost) - now)

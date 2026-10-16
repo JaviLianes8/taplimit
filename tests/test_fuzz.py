@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import random
 import tracemalloc
-from collections import deque
-from collections.abc import Iterator
 from typing import Any
 
 import pytest
@@ -108,30 +106,29 @@ def test_keyed_windows_each_match_the_model(seed: int) -> None:
         assert live <= set(keyed._windows) and len(keyed) <= 4
 
 
-class _CountingDeque(deque[Any]):
+class _CountingList(list[int]):
     steps = 0
 
-    def __iter__(self) -> Iterator[Any]:
-        for item in super().__iter__():
-            _CountingDeque.steps += 1
-            yield item
-
-    def __reversed__(self) -> Iterator[Any]:
-        for item in super().__reversed__():
-            _CountingDeque.steps += 1
-            yield item
+    def __getitem__(self, index: Any) -> Any:
+        _CountingList.steps += 1
+        return super().__getitem__(index)
 
 
-def test_queueing_many_waiters_does_linear_work() -> None:
-    clock = FakeClock()
-    limiter = RateLimiter(1, 1.0, clock=clock.time, sleep=lambda s: None)
-    limiter._win.runs = _CountingDeque()
-    _CountingDeque.steps = 0
-    waiters = 5000
-    for _ in range(waiters):
-        limiter._reserve(None, 1, True, None)  # what each blocking caller does first
-    assert limiter.retry_after() == waiters
-    assert _CountingDeque.steps <= 3 * waiters
+def test_a_long_queue_of_waiters_and_its_cancellation_do_near_linear_work() -> None:
+    calls, waiters = 2000, 4000
+    limiter = RateLimiter(calls, 10_000.0, clock=lambda: 0.0)
+    window = limiter._win
+    for t in range(calls):  # a full window of grants at distinct instants
+        window.take(float(t), 1)
+    window.tree = _CountingList(window.tree)
+    _CountingList.steps = 0
+    reserved = [limiter._reserve(None, 1, True, None)[1] for _ in range(waiters)]
+    assert reserved == [10_000.0 + t for t in range(calls)] + [20_000.0 + t for t in range(calls)]
+    for ready in reserved:  # every waiter gives up, oldest first
+        limiter._give_back(window, ready, 1)
+    assert limiter.retry_after() == 10_000.0
+    assert window.entries() == calls
+    assert _CountingList.steps <= 60 * (calls + waiters)  # about 4 * log2 per operation
 
 
 def test_a_huge_cost_takes_constant_memory_and_time() -> None:
@@ -161,4 +158,4 @@ def test_an_abandoned_huge_reservation_is_returned_in_one_step() -> None:
     with pytest.raises(_Interrupt):
         limiter.acquire(cost=calls)
     assert limiter.retry_after(calls) == 1.0
-    assert len(limiter._win.runs) == 1
+    assert limiter._win.entries() == 1

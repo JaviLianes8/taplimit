@@ -55,6 +55,8 @@ the error types and the documented behaviour change only with a new major versio
   module, so tracebacks and reprs show `taplimit.RateLimitExceeded`.
 - Slots taken together are stored together: memory follows the number of acquisitions,
   not their cost, and returning an abandoned reservation is a single step.
+- An injected `clock` that returns NaN or an infinity raises `ValueError`; waits longer
+  than a day sleep in steps of a day. Error messages show large numbers by their size.
 - `rate_limit`'s `on_limit` is typed `Literal["block", "raise"]`.
 - `parse_rate` reads ASCII only (no other digits or spaces), quotes at most 40 characters
   of a bad string in its message, and raises `TypeError` for a non-string.

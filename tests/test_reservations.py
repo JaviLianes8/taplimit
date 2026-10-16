@@ -18,7 +18,7 @@ async def _parked(seconds: float) -> None:
 def test_acquisitions_at_one_instant_share_one_entry() -> None:
     limiter = RateLimiter(1000, 1, clock=lambda: 0.0)
     assert all(limiter.try_acquire() for _ in range(1000))
-    assert len(limiter._win.runs) == 1 and limiter._win.total == 1000
+    assert limiter._win.entries() == 1 and limiter._win.total == 1000
 
 
 def test_cancelling_one_of_two_waiters_at_the_same_instant_keeps_the_other() -> None:
@@ -29,7 +29,7 @@ def test_cancelling_one_of_two_waiters_at_the_same_instant_keeps_the_other() -> 
         first = asyncio.ensure_future(limiter.acquire_async(cost=2))
         second = asyncio.ensure_future(limiter.acquire_async(cost=1))
         await asyncio.sleep(0)
-        assert len(limiter._win.runs) == 2  # both reserved at 10.0, in one entry
+        assert limiter._win.entries() == 2  # both reserved at 10.0, in one entry
         assert limiter.available() == 0
         assert limiter.retry_after(3) == 20.0
         first.cancel()
@@ -42,7 +42,7 @@ def test_cancelling_one_of_two_waiters_at_the_same_instant_keeps_the_other() -> 
         with pytest.raises(asyncio.CancelledError):
             await second
         assert limiter.retry_after(3) == 10.0
-        assert len(limiter._win.runs) == 1
+        assert limiter._win.entries() == 1
 
     asyncio.run(main())
 

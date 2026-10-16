@@ -25,7 +25,9 @@ class RateLimitExceeded(Exception):
     def __init__(self, retry_after: float, key: object = None) -> None:
         self.retry_after = retry_after
         self.key = key
-        super().__init__(f"rate limit exceeded, retry after {retry_after:.3f}s")
+        # Very long waits switch to exponent notation so the message stays one short line.
+        shown = f"{retry_after:.3f}" if abs(retry_after) < 1e9 else f"{retry_after:.3g}"
+        super().__init__(f"rate limit exceeded, retry after {shown}s")
 
     def __reduce__(self) -> tuple[type[RateLimitExceeded], tuple[float, object]]:
         return (type(self), (self.retry_after, self.key))

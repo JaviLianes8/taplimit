@@ -97,7 +97,7 @@ class RateLimiter(_Base):
         behind them and the limit holds across a reset.
         """
         with self._lock:
-            self._win.clear(self._clock())
+            self._win.clear(self._now())
 
     def __repr__(self) -> str:
         return f"RateLimiter(calls={self._calls}, period={self._period})"

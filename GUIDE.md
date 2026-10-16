@@ -18,8 +18,8 @@ Consequences:
   end of one window cannot be followed by another at the start of the next.
 - **Memory.** One entry per acquisition granted in the last period plus one per waiting
   caller; slots taken together share an entry, so `cost=1_000_000` costs no more than
-  `cost=1`. Each operation does constant work on average, plus a walk over the entries that
-  is bounded by the number of acquisitions in the window.
+  `cost=1`. Finding the slot that must expire and returning an abandoned reservation take
+  logarithmic time, so even tens of thousands of queued or cancelled waiters stay cheap.
 
 A token bucket with capacity `calls` refilling at `calls / period` allows the same burst
 but refills continuously; the sliding window is stricter and easier to reason about,
@@ -40,7 +40,9 @@ differs only at instants exactly one period after a grant.
 ### Clocks
 
 `clock` must never go backwards; the default `time.monotonic` does not. Any unit works as
-long as `period`, `timeout` and the values `clock` returns use the same one.
+long as `period`, `timeout` and the values `clock` returns use the same one. A reading that
+is NaN or infinite raises `ValueError` and records nothing. Waits longer than a day are
+slept in steps of at most a day, which every platform's `sleep` accepts.
 
 ## Acquiring
 
@@ -73,6 +75,11 @@ when the decorator is created (`limit(...)`, `rate_limit(...)`), and those of `a
 | `timeout` | `None` or a real number of seconds, 0 or more (`math.inf` included), only with blocking | `TypeError` for other types; `ValueError` for negatives, NaN, or a timeout without blocking |
 | `on_limit` | `"block"` or `"raise"`; a timeout only with `"block"` | `ValueError` |
 | rate strings | see [Rate strings](#rate-strings) | `ValueError`, or `TypeError` for a non-string |
+| keys | anything hashable | `TypeError` for an unhashable key |
+
+Exceptions raised by your own code (a key's `__hash__` or `__eq__`, an `__index__`, the
+`clock`, `sleep` or `async_sleep`) pass through unchanged; a wait interrupted that way gives
+its reserved slots back.
 
 `RateLimitExceeded` is the only error a well-formed call raises, when it chose not to wait
 (`blocking=False`, `on_limit="raise"`) or the wait would exceed `timeout`. It subclasses

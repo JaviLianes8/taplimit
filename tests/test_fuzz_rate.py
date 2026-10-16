@@ -45,9 +45,10 @@ def test_random_text_never_breaks_parse_rate(seed: int) -> None:
 
 @pytest.mark.parametrize(
     "text",
-    ["1" * 200_000 + "x", "1/" + "1" * 200_000 + "!", "1/s" + " " * 200_000 + "x",
-     " " * 200_000 + "1/", "1/" + "s" * 200_000 + "1", "1" + " " * 200_000 + "/"],
-    ids=[f"hostile{i}" for i in range(6)],
+    ["1/" + " " * 200_000 + "!", "1" * 200_000 + "x", "1/" + "1" * 200_000 + "!",
+     "1/s" + " " * 200_000 + "x", " " * 200_000 + "1/", "1/" + "s" * 200_000 + "1",
+     "1" + " " * 200_000 + "/"],
+    ids=[f"hostile{i}" for i in range(7)],
 )  # fmt: skip
 def test_long_hostile_strings_fail_fast(text: str) -> None:
     with pytest.raises(ValueError) as info:
