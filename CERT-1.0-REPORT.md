@@ -12,7 +12,7 @@ Progress:
 - [x] Every interpreter on this PC (item 10)
 - [x] Five QA lenses report PASS (item 19)
 - [ ] Independent reviewer (item 16)
-- [ ] Gates (item 15)
+- [x] Gates (item 15)
 - [ ] PR open and trace guard CLEAN (item 17); merge and publish left to the maintainer
 
 ## Baseline on 0.2.0 (before any change)
@@ -153,11 +153,19 @@ mutants, 34 killed, 2 equivalent.
 ## Supported Pythons (item 10)
 
 `requires-python = ">=3.10"`. The suite from the extracted sdist, with `src` removed so it
-imports the installed wheel, on every interpreter of this PC from 3.10 up (at be199b0):
-CPython 3.10.19, 3.11.5, 3.12.12, 3.13.2, 3.14.2 and 3.14.2 free-threaded, 619 passed and
+imports the installed wheel, on every interpreter of this PC from 3.10 up, at 233502a:
+CPython 3.10.19, 3.11.5, 3.12.12, 3.13.2, 3.14.2 and 3.14.2 free-threaded, 661 passed and
 10 skipped on each (five live-oracle tests without the reference libraries, four opt-in
 end-to-end tests, the fetched-documentation test without its copy). 3.8 and 3.9 are also
-installed but below `requires-python`.
+installed but below `requires-python`. Lens d repeated this independently at ee28d15.
+
+## Gates (item 15), at 233502a
+
+From a fresh clone in a private virtual environment (CPython 3.13.2), each command on its
+own: `ruff format --check .`, `ruff check .`, `mypy --strict src` and `mypy --strict src
+tests` exit 0; `pytest` 661 passed, 10 skipped; `TAPLIMIT_E2E=1 pytest
+tests/test_e2e_wheel.py` 4 passed (wheel in a fresh venv, console script, upgrade from PyPI
+0.1.0); `python -m build` and `twine check --strict` pass for the wheel and the sdist.
 
 ## QA lenses (item 19)
 
