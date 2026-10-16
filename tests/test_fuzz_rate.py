@@ -55,8 +55,10 @@ def test_long_hostile_strings_fail_fast(text: str) -> None:
     assert len(str(info.value)) < 140
 
 
-@pytest.mark.parametrize("text", ["10pers", "10persec", "10 pers", "10/pers", "5 super s"])
-def test_per_must_stand_alone(text: str) -> None:
+@pytest.mark.parametrize(
+    "text", ["10pers", "10persec", "10 pers", "10/pers", "5 super s", "5/1.s", "5/1. min", "5/.s"]
+)
+def test_per_must_stand_alone_and_a_multiplier_needs_digits(text: str) -> None:
     with pytest.raises(ValueError):
         parse_rate(text)
 
